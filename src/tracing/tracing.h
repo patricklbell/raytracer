@@ -7,9 +7,6 @@
     #endif
 
     #include "third_party/tracy/public/tracy/Tracy.hpp"
-    #if R_BACKEND == R_BACKEND_OPENGL
-        #include "third_party/tracy/public/tracy/TracyOpenGL.hpp"
-    #endif
 #else
     #define TracyNoop
 
@@ -118,21 +115,4 @@
     #define TracyFiberEnter(x)
     #define TracyFiberEnterHint(x,y)
     #define TracyFiberLeave
-
-    #if R_BACKEND == R_BACKEND_OPENGL
-        #define TracyGpuContext
-        #define TracyGpuContextName(x,y)
-        #define TracyGpuNamedZone(x,y,z)
-        #define TracyGpuNamedZoneC(x,y,z,w)
-        #define TracyGpuZone(x)
-        #define TracyGpuZoneC(x,y)
-        #define TracyGpuZoneTransient(x,y,z)
-        #define TracyGpuCollect
-
-        #define TracyGpuNamedZoneS(x,y,z,w)
-        #define TracyGpuNamedZoneCS(x,y,z,w,a)
-        #define TracyGpuZoneS(x,y)
-        #define TracyGpuZoneCS(x,y,z)
-        #define TracyGpuZoneTransientS(x,y,z,w)
-    #endif
 #endif
