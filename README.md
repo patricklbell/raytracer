@@ -8,8 +8,7 @@ No special CPU instructions are required.
 The build is managed through the `build.bat` script on Windows and the `build.sh` script on Linux, refer to the respective help messages for usage instructions. 
 - Cross-compiles as C and C++
 - MSVC/gcc/g++/clang/clang++ recent enough to support C11
-- The shared library only depends on libc, libm and a few core OS APIs
-- The library can be statically built by including the `lib/lib.h` header and adding `lib/lib.c` as a translation unit
+- Only depends on libc, libm and a few core OS APIs
 
 ### Windows
 Building on Windows requires either MSVC or clang to be installed and the command line to be correctly configured. 
