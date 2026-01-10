@@ -24,6 +24,23 @@ internal vec3_f32 lerp_3f32(vec3_f32 x, vec3_f32 y, f32 a)   { return (vec3_f32)
 internal vec3_f32 max_3f32(vec3_f32 a, vec3_f32 b)           { return (vec3_f32) {.x = Max(a.x,b.x),.y = Max(a.y,b.y),.z = Max(a.z,b.z)}; }
 internal vec3_f32 min_3f32(vec3_f32 a, vec3_f32 b)           { return (vec3_f32) {.x = Min(a.x,b.x),.y = Min(a.y,b.y),.z = Min(a.z,b.z)}; }
 internal vec3_f32 addscl_3f32(vec3_f32 a, f32 b)             { return (vec3_f32) {.x = a.x + b,.y = a.y + b,.z = a.z + b}; }
+internal vec3_f32 abs_3f32(vec3_f32 x)                       { return (vec3_f32) {.x = abs_f32(x.x),.y = abs_f32(x.y),.z = abs_f32(x.z)}; }
+internal vec3_f32 rand_unit_cube_3f32()                      { return (vec3_f32) {.x = rand_unit_f32(),.y = rand_unit_f32(),.z = rand_unit_f32()}; }
+internal vec3_f32 rand_unit_sphere_3f32() {
+    for (;;) { // @todo
+        vec3_f32 s = rand_unit_cube_3f32();
+        if (length2_3f32(s) <= 1.f)
+            return s;
+    }
+}
+internal vec3_f32 rand_unit_hemisphere_3f32(vec3_f32 n) {
+    vec3_f32 s = rand_unit_sphere_3f32();
+    return (dot_3f32(s, n) < 0.f) ? mul_3f32(s, -1.f) : s;
+}
+
+internal vec3_b leq_3f32_f32(vec3_f32 x, f32 y) { return (vec3_b) {.x = x.x <= y,.y = x.y <= y,.z = x.z <= y}; }
+internal bool   all_3b(vec3_b x)                { return x.x && x.y && x.z; }
+internal bool   any_3b(vec3_b x)                { return x.x || x.y || x.z; }
 
 internal vec4_f32 make_angle_axis_quat(f64 t, vec3_f32 a)    { f32 st = (f32)sin_f64(t/2.), ct = (f32)cos_f64(t/2.); return (vec4_f32) {.x = st*a.x,.y = st*a.y,.z = st*a.z,.w = ct};}
 internal vec4_f32 make_axis_quat(vec3_f32 a)                 { return (vec4_f32) {.x = a.x,.y = a.y,.z = a.z,.w = 0.f};}

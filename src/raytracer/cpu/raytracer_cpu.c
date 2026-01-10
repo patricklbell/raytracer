@@ -22,23 +22,24 @@ rt_hook void rt_tracer_cleanup(RT_Handle handle) {
     arena_release(tracer->arena);
 }
 
-rt_hook void rt_tracer_cast(RT_Handle handle, RT_CastSettings settings, vec3_f32* out_color, int width, int height) {
+rt_hook void rt_tracer_cast(RT_Handle handle, RT_CastSettings settings, vec3_f32* out_radiance, int width, int height) {
     RT_CPU_Tracer* tracer = rt_cpu_handle_to_tracer(handle);
-    rt_cpu_raygen(tracer, &settings, out_color, width, height);
+    rt_cpu_raygen(tracer, &settings, out_radiance, width, height);
 }
 
 // ============================================================================
 // cpu kernels
 // ============================================================================
-void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_color, int width, int height) {
+void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {
     vec3_f32 z_extents = (vec3_f32){.xy=s->z_extents, ._z=s->z_near};
     vec3_f32 right = cross_3f32(s->forward, s->up);
     f32 x_norm_sample_size = 1.f/(f32)(width *s->samples);
     f32 y_norm_sample_size = 1.f/(f32)(height*s->samples);
+    f32 inv_sample_count = 1.f/((f32)s->samples*s->samples);
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            vec3_f32* c = &out_color[y*width + x];
+            vec3_f32* c = &out_radiance[y*width + x];
             
             *c = zero_struct;
             for (int y_sample = 0; y_sample < s->samples; y_sample++) {
@@ -69,19 +70,72 @@ void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* ou
                     ray.direction = normalize_3f32(near);
         
                     RT_CPU_HitRecord record;
-                    if (rt_cpu_trace_ray(tracer, &ray, (RT_CPU_Interval){0.00001, MAX_F32}, &record)) {
-                        *c = add_3f32(*c, rt_cpu_closest_hit(tracer, &ray, &record));
-                    } else {
-                        *c = add_3f32(*c, rt_cpu_miss(tracer, &ray));
-                    }
+                    *c = add_3f32(*c, rt_cpu_trace_ray(tracer, &ray, s->max_bounces, rt_cpu_make_pos_interval(), &record));
                 }
             }
-            *c = mul_3f32(*c, 1.f/(f32)s->samples);
+            *c = mul_3f32(*c, inv_sample_count);
         }
     }
 }
 
-bool rt_cpu_trace_ray(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
+vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, u8 depth, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
+    if (depth == 0) {
+        return make_3f32(0.f,0.f,0.f);
+    }
+
+    if (rt_cpu_intersect(tracer, in_ray, interval, out_record)) {
+        return rt_cpu_closest_hit(tracer, in_ray, depth-1, out_record);
+    }
+    return rt_cpu_miss(tracer, in_ray, depth-1);
+}
+
+vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, u8 depth, RT_CPU_HitRecord* in_record) {
+    if (rt_is_zero_handle(in_record->material)) {
+        return make_3f32(1.f, 0.f, 1.f);
+    }
+
+    RT_Material* mat = &((RT_MaterialNode*)in_record->material.v64[0])->v;
+    switch (mat->type) {
+        case RT_MaterialType_Lambertian:{
+            vec3_f32 i = rt_cpu_cosine_sample(in_record->n);
+
+            RT_CPU_Ray i_ray = {
+                .origin=add_3f32(in_record->p, mul_3f32(in_record->n, 0.001f)),
+                .direction=i,
+            };
+            RT_CPU_HitRecord i_record;
+            
+            vec3_f32 i_radiance = rt_cpu_trace_ray(tracer, &i_ray, depth-1, rt_cpu_make_pos_interval(), &i_record);
+            return elmul_3f32(i_radiance, mat->albedo);
+        }break;
+        case RT_MaterialType_Normal:{
+            return rt_cpu_normal_to_radiance(in_record->n);
+        }break;
+    }
+
+    Assert(false);
+    return (vec3_f32){};
+}
+
+vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, u8 depth) {
+    f32 y = Clamp(in_ray->direction.y, 0.f, 1.f);
+    f32 t = pow_f32(y, 0.5f);
+
+    vec3_f32 sky = lerp_3f32(
+        make_3f32(1.f, 1.f, 1.f),   // horizon
+        make_3f32(0.5f, 0.7f, 1.f),    // zenith
+        t
+    );
+
+    // atmospheric darkening near horizon
+    sky = mul_3f32(sky, 0.7f + 0.25f * y);
+    return sky;
+}
+
+// ============================================================================
+// helpers
+// ============================================================================
+bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
     bool hit = false;
 
     for EachList(en, RT_EntityNode, tracer->world->entities.first) {
@@ -91,7 +145,7 @@ bool rt_cpu_trace_ray(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, RT_CPU_In
         bool hit_entity = false;
         switch (entity->type) {
             case RT_EntityType_Sphere:{
-                hit_entity = rt_cpu_trace_ray_sphere(tracer, &entity->sphere, in_ray, interval, out_record);
+                hit_entity = rt_cpu_intersect_sphere(tracer, &entity->sphere, in_ray, interval, out_record);
             }break;
         }
 
@@ -105,36 +159,7 @@ bool rt_cpu_trace_ray(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, RT_CPU_In
     return hit;
 }
 
-static vec3_f32 rt_cpu_normal_to_color(vec3_f32 normal) {
-    return mul_3f32(add_3f32(normal, make_3f32(1.f,1.f,1.f)), 0.5f);
-}
-
-vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, const RT_CPU_Ray* ray, RT_CPU_HitRecord* in_record) {
-    if (rt_is_zero_handle(in_record->material)) {
-        return make_3f32(1.f, 0.f, 1.f);
-    }
-
-    RT_Material* mat = &((RT_MaterialNode*)in_record->material.v64[0])->v;
-    switch (mat->type) {
-        case RT_MaterialType_Lambertian:{
-            return mat->albedo;
-        }break;
-        case RT_MaterialType_Normal:{
-            return rt_cpu_normal_to_color(in_record->n);
-        }break;
-    }
-
-    Assert(false);
-    return (vec3_f32){};
-}
-vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, const RT_CPU_Ray* ray) {
-    return make_3f32(0,0,0);
-}
-
-// ============================================================================
-// helpers
-// ============================================================================
-bool rt_cpu_trace_ray_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
+bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
     Assert(in_sphere->radius > 0.f);
 
     // Sphere: |p - c|^2 = r^2
@@ -154,9 +179,9 @@ bool rt_cpu_trace_ray_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, 
     f32 half_sqrt_d = sqrt_f32(qtr_d);
 
     // since a is always positive we know - is the closer solution
-    f32 t = (-half_b - half_sqrt_d) / a;
+    f32 t = (-half_b - half_sqrt_d)/a;
     if (!rt_cpu_in_interval(t, &interval)) {
-        t = (-half_b + half_sqrt_d) / a;
+        t = (-half_b + half_sqrt_d)/a;
         if (!rt_cpu_in_interval(t, &interval))
             return false;
     }
@@ -168,6 +193,18 @@ bool rt_cpu_trace_ray_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, 
     return true;
 }
 
+RT_CPU_Interval rt_cpu_make_pos_interval() {
+    return (RT_CPU_Interval){EPSILON_F32, MAX_F32};
+}
 bool rt_cpu_in_interval(f32 x, const RT_CPU_Interval* in_interval) {
     return x >= in_interval->min && x <= in_interval->max; 
+}
+
+vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal) {
+    vec3_f32 i = add_3f32(rand_unit_sphere_3f32(), normal);
+    bool near_zero = all_3b(leq_3f32_f32(abs_3f32(i), EPSILON_F32));
+    return near_zero ? normal : i;
+}
+vec3_f32 rt_cpu_normal_to_radiance(vec3_f32 normal) {
+    return mul_3f32(add_3f32(normal, make_3f32(1.f,1.f,1.f)), 0.5f);
 }

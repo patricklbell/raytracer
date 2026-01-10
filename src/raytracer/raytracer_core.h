@@ -107,9 +107,10 @@ struct RT_CastSettings {
     vec2_f32 z_extents;
     f32 z_near;
     u8 samples;
+    u8 max_bounces;
 };
 
 rt_hook RT_Handle rt_make_tracer(RT_TracerSettings settings);
 rt_hook void      rt_tracer_update_world(RT_Handle handle, RT_World* world);
 rt_hook void      rt_tracer_cleanup(RT_Handle handle);
-rt_hook void      rt_tracer_cast(RT_Handle tracer, RT_CastSettings settings, vec3_f32* out_color, int width, int height);
+rt_hook void      rt_tracer_cast(RT_Handle tracer, RT_CastSettings settings, vec3_f32* out_radiance, int width, int height);

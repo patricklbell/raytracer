@@ -18,8 +18,8 @@ static void add_lambertian_sphere(RT_World* world, vec3_f32 center, f32 radius, 
 demo_hook void render(const DEMO_Settings* settings) {
     {DeferResource(RT_Handle tracer = rt_make_tracer((RT_TracerSettings){}), rt_tracer_cleanup(tracer)) {
         {DeferResource(RT_World* world = rt_make_world((RT_WorldSettings){}), rt_world_cleanup(world)) {
-            add_lambertian_sphere(world, make_3f32(0,0,0), 1.0, make_3f32(1,0,0));
-            add_lambertian_sphere(world, make_3f32(0,-101,0), 100.0, make_3f32(0,1,0));
+            add_lambertian_sphere(world, make_3f32(0,0,0), 1.0, make_3f32(0.5,0.5,0.5));
+            add_lambertian_sphere(world, make_3f32(0,-101,0), 100.0, make_3f32(0.5,0.5,0.5));
             
             rt_tracer_update_world(tracer, world);
             {DeferResource(Temp scratch = scratch_begin(NULL, 0), scratch_end(scratch)) {
@@ -37,6 +37,7 @@ demo_hook void render(const DEMO_Settings* settings) {
                         .z_extents=make_2f32(0.1*aspect_ratio, 0.1),
                         .z_near=0.1,
                         .samples=settings->samples,
+                        .max_bounces=8,
                     },
                     buffer, width, height
                 );

@@ -67,6 +67,24 @@ internal vec3_f32 lerp_3f32(vec3_f32 x, vec3_f32 y, f32 a);
 internal vec3_f32 max_3f32(vec3_f32 a, vec3_f32 b);
 internal vec3_f32 min_3f32(vec3_f32 a, vec3_f32 b);
 internal vec3_f32 addscl_3f32(vec3_f32 a, f32 b);
+internal vec3_f32 abs_3f32(vec3_f32 x);
+internal vec3_f32 rand_unit_cube_3f32();
+internal vec3_f32 rand_unit_sphere_3f32();
+internal vec3_f32 rand_unit_hemisphere_3f32(vec3_f32 n);
+
+typedef union vec3_b vec3_b;
+union vec3_b {
+    struct {
+        b8 x : 1;
+        b8 y : 1;
+        b8 z : 1;
+        b8 _padding : 5;
+    };
+};
+
+internal vec3_b leq_3f32_f32(vec3_f32 x, f32 y);
+internal bool   all_3b(vec3_b x);
+internal bool   any_3b(vec3_b x);
 
 #define length2_3f32(a) dot_3f32(a,a)
 
@@ -180,6 +198,8 @@ union rect_f32 {
 };
 
 internal rect_f32 make_rect_f32(vec2_f32 tl, vec2_f32 br);
+
+
 
 #define PI_F32           3.1415926535897932384626433832795028841971693993751058209749445923078164062f
 #define PI_F64           3.1415926535897932384626433832795028841971693993751058209749445923078164062
