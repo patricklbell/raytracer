@@ -8,11 +8,13 @@ int main(int argc, char** argv) {
 
     b8 help = false, bad = false;
     const int DEFAULT_WIDTH=100, DEFAULT_HEIGHT=100;
+    const u8 DEFAULT_BOUNCES=8;
 
     DEMO_Settings settings = {
         .width=DEFAULT_WIDTH,
         .height=DEFAULT_HEIGHT,
         .samples=1,
+        .bounces=DEFAULT_BOUNCES,
     };
 
     // argument parsing
@@ -33,21 +35,29 @@ int main(int argc, char** argv) {
             help = true;
         } else if (ntstr8_begins_with(arg, "--width")) {
             if (sscanf(arg.cstr, "--width=%d", &settings.width) != 1 || settings.width <= 0) {
-                fprintf(stderr, "invalid WIDTH argument");
+                fprintf(stderr, "invalid WIDTH argument, must be > 0");
                 bad = true;
             }
         } else if (ntstr8_begins_with(arg, "--height")) {
             if (sscanf(arg.cstr, "--height=%d", &settings.height) != 1 || settings.height <= 0) {
-                fprintf(stderr, "invalid HEIGHT argument");
+                fprintf(stderr, "invalid HEIGHT argument, must be > 0");
                 bad = true;
             }
         } else if (ntstr8_begins_with(arg, "--samples")) {
             int samples;
             if (sscanf(arg.cstr, "--samples=%d", &samples) != 1 || samples <= 0 || samples > 255) {
-                fprintf(stderr, "invalid SAMPLES argument");
+                fprintf(stderr, "invalid SAMPLES argument, must be > 0 and < 255");
                 bad = true;
             } else {
                 settings.samples = (u8)samples;
+            }
+        } else if (ntstr8_begins_with(arg, "--bounces")) {
+            int bounces;
+            if (sscanf(arg.cstr, "--bounces=%d", &bounces) != 1 || bounces <= 0 || bounces > RT_MAX_MAX_BOUNCES) {
+                fprintf(stderr, "invalid BOUNCES argument, must be > 0 and < 255");
+                bad = true;
+            } else {
+                settings.bounces = (u8)bounces;
             }
         } else if (ntstr8_begins_with(arg, "--seed")) {
             if (sscanf(arg.cstr, "--seed=%d", &seed) != 1) {
@@ -71,11 +81,12 @@ int main(int argc, char** argv) {
             "\n"
             "Options:\n"
             "   -h, --help          show this help message\n"
-            "   --width=WIDTH       set width of image to WIDTH pixels. defaults to %d\n"
-            "   --height=HEIGHT     set height of image to HEIGHT pixels. defaults to %d\n"
-            "   --samples=SAMPLES   set number of samples per pixel to SAMPLES x SAMPLES. defaults to 1\n"
-            "   --seed=SEED         seeds all random number generators\n",
-            DEFAULT_WIDTH, DEFAULT_HEIGHT
+            "   --width=WIDTH       set the width of image to WIDTH pixels. defaults to %d\n"
+            "   --height=HEIGHT     set the height of image to HEIGHT pixels. defaults to %d\n"
+            "   --samples=SAMPLES   set the number of samples per pixel to SAMPLES x SAMPLES. defaults to 1\n"
+            "   --bounces=BOUNCES   set the maximum number of ray bounces to BOUNCES. defaults to %d\n"
+            "   --seed=SEED         seed random number generators with SEED\n",
+            DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_BOUNCES
         );
         return !help;
     }

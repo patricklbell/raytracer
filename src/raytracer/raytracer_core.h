@@ -15,6 +15,7 @@ bool rt_is_zero_handle(RT_Handle handle);
 
 typedef enum RT_MaterialType {
     RT_MaterialType_Lambertian,
+    RT_MaterialType_Dieletric,
     RT_MaterialType_Metal,
     RT_MaterialType_Normal,
     RT_MaterialType_Count ENUM_CASE_UNUSED,
@@ -25,6 +26,7 @@ struct RT_Material {
     RT_MaterialType type;
     vec3_f32 albedo;
     f32 roughness;
+    f32 ior;
 };
 
 typedef struct RT_MaterialNode RT_MaterialNode;
@@ -99,7 +101,11 @@ void          rt_world_remove_material(RT_World* world, RT_Handle handle);
 // ============================================================================
 // tracer
 // ============================================================================
-struct RT_TracerSettings {};
+struct RT_TracerSettings {
+    u8 max_bounces;
+};
+
+#define RT_MAX_MAX_BOUNCES 64
 
 typedef struct RT_CastSettings RT_CastSettings;
 struct RT_CastSettings {
@@ -109,10 +115,10 @@ struct RT_CastSettings {
     vec2_f32 z_extents;
     f32 z_near;
     u8 samples;
-    u8 max_bounces;
+    f32 ior;
 };
 
 rt_hook RT_Handle rt_make_tracer(RT_TracerSettings settings);
-rt_hook void      rt_tracer_update_world(RT_Handle handle, RT_World* world);
+rt_hook void      rt_tracer_load_world(RT_Handle handle, RT_World* world);
 rt_hook void      rt_tracer_cleanup(RT_Handle handle);
 rt_hook void      rt_tracer_cast(RT_Handle tracer, RT_CastSettings settings, vec3_f32* out_radiance, int width, int height);

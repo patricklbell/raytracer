@@ -63,6 +63,7 @@ internal f32      length_3f32(vec3_f32 a);
 internal vec3_f32 normalize_3f32(vec3_f32 a);
 internal vec3_f32 cross_3f32(vec3_f32 a, vec3_f32 b);
 internal vec3_f32 reflect_3f32(vec3_f32 i, vec3_f32 n);
+internal vec3_f32 refract_3f32(vec3_f32 i, vec3_f32 n, f32 eta);
 internal vec3_f32 lerp_3f32(vec3_f32 x, vec3_f32 y, f32 a);
 internal vec3_f32 max_3f32(vec3_f32 a, vec3_f32 b);
 internal vec3_f32 min_3f32(vec3_f32 a, vec3_f32 b);

@@ -15,6 +15,7 @@ struct DEMO_Settings {
     int         width;
     int         height;
     u8          samples;
+    u8          bounces;
     NTString8   out; 
 };
 

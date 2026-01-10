@@ -6,26 +6,33 @@ internal vec2_f32 elmul_2f32(vec2_f32 a, vec2_f32 b)         { return (vec2_f32)
 internal f32      dot_2f32(vec2_f32 a, vec2_f32 b)           { return a.x*b.x + a.y*b.y; }
 internal f32      length_2f32(vec2_f32 a)                    { return sqrt_f32(a.x*a.x + a.y*a.y); }
 internal vec2_f32 normalize_2f32(vec2_f32 a)                 { f32 l = length_2f32(a); return (vec2_f32) {.x = a.x/l,.y = a.y/l}; }
-
-internal vec3_f32 make_3f32(f32 x, f32 y, f32 z)             { return (vec3_f32) {.x=x,.y=y,.z=z}; }
-internal vec3_f32 make_scale_3f32(f32 s)                     { return (vec3_f32) {.x=s,.y=s,.z=s}; }
-internal vec3_f32 make_up_3f32()                             { return (vec3_f32) {.x=0,.y=1,.z=0}; }
-internal vec3_f32 add_3f32(vec3_f32 a, vec3_f32 b)           { return (vec3_f32) {.x = a.x + b.x,.y = a.y + b.y,.z = a.z + b.z}; }
-internal vec3_f32 sub_3f32(vec3_f32 a, vec3_f32 b)           { return (vec3_f32) {.x = a.x - b.x,.y = a.y - b.y,.z = a.z - b.z}; }
-internal vec3_f32 mul_3f32(vec3_f32 a, f32 b)                { return (vec3_f32) {.x = a.x*b,.y = a.y*b,.z = a.z*b}; }
-internal vec3_f32 elmul_3f32(vec3_f32 a, vec3_f32 b)         { return (vec3_f32) {.x = a.x*b.x,.y = a.y*b.y,.z = a.z*b.z}; }
-internal vec3_f32 eldiv_3f32(vec3_f32 a, vec3_f32 b)         { return (vec3_f32) {.x = a.x/b.x,.y = a.y/b.y,.z = a.z/b.z}; }
-internal f32      dot_3f32(vec3_f32 a, vec3_f32 b)           { return a.x*b.x + a.y*b.y + a.z*b.z; }
-internal f32      length_3f32(vec3_f32 a)                    { return sqrt_f32(a.x*a.x + a.y*a.y + a.z*a.z); }
-internal vec3_f32 normalize_3f32(vec3_f32 a)                 { f32 l = length_3f32(a); return (vec3_f32) {.x = a.x/l,.y = a.y/l,.z = a.z/l}; }
-internal vec3_f32 cross_3f32(vec3_f32 a, vec3_f32 b)         { return (vec3_f32) {.x = a.y*b.z - a.z*b.y,.y = -(a.x*b.z - a.z*b.x),.z = a.x*b.y - a.y*b.x}; }
-internal vec3_f32 reflect_3f32(vec3_f32 i, vec3_f32 n)       { return sub_3f32(i, mul_3f32(n, 2.f*dot_3f32(i, n))); }
-internal vec3_f32 lerp_3f32(vec3_f32 x, vec3_f32 y, f32 a)   { return (vec3_f32) {.x = (1.f-a)*x.x + a*y.x,.y = (1.f-a)*x.y + a*y.y,.z = (1.f-a)*x.z + a*y.z}; }
-internal vec3_f32 max_3f32(vec3_f32 a, vec3_f32 b)           { return (vec3_f32) {.x = Max(a.x,b.x),.y = Max(a.y,b.y),.z = Max(a.z,b.z)}; }
-internal vec3_f32 min_3f32(vec3_f32 a, vec3_f32 b)           { return (vec3_f32) {.x = Min(a.x,b.x),.y = Min(a.y,b.y),.z = Min(a.z,b.z)}; }
-internal vec3_f32 addscl_3f32(vec3_f32 a, f32 b)             { return (vec3_f32) {.x = a.x + b,.y = a.y + b,.z = a.z + b}; }
-internal vec3_f32 abs_3f32(vec3_f32 x)                       { return (vec3_f32) {.x = abs_f32(x.x),.y = abs_f32(x.y),.z = abs_f32(x.z)}; }
-internal vec3_f32 rand_unit_cube_3f32()                      { return (vec3_f32) {.x = rand_unit_f32(),.y = rand_unit_f32(),.z = rand_unit_f32()}; }
+   
+internal vec3_f32 make_3f32(f32 x, f32 y, f32 z)                { return (vec3_f32) {.x=x,.y=y,.z=z}; }
+internal vec3_f32 make_scale_3f32(f32 s)                        { return (vec3_f32) {.x=s,.y=s,.z=s}; }
+internal vec3_f32 make_up_3f32()                                { return (vec3_f32) {.x=0,.y=1,.z=0}; }
+internal vec3_f32 add_3f32(vec3_f32 a, vec3_f32 b)              { return (vec3_f32) {.x = a.x + b.x,.y = a.y + b.y,.z = a.z + b.z}; }
+internal vec3_f32 sub_3f32(vec3_f32 a, vec3_f32 b)              { return (vec3_f32) {.x = a.x - b.x,.y = a.y - b.y,.z = a.z - b.z}; }
+internal vec3_f32 mul_3f32(vec3_f32 a, f32 b)                   { return (vec3_f32) {.x = a.x*b,.y = a.y*b,.z = a.z*b}; }
+internal vec3_f32 elmul_3f32(vec3_f32 a, vec3_f32 b)            { return (vec3_f32) {.x = a.x*b.x,.y = a.y*b.y,.z = a.z*b.z}; }
+internal vec3_f32 eldiv_3f32(vec3_f32 a, vec3_f32 b)            { return (vec3_f32) {.x = a.x/b.x,.y = a.y/b.y,.z = a.z/b.z}; }
+internal f32      dot_3f32(vec3_f32 a, vec3_f32 b)              { return a.x*b.x + a.y*b.y + a.z*b.z; }
+internal f32      length_3f32(vec3_f32 a)                       { return sqrt_f32(a.x*a.x + a.y*a.y + a.z*a.z); }
+internal vec3_f32 normalize_3f32(vec3_f32 a)                    { f32 l = length_3f32(a); return (vec3_f32) {.x = a.x/l,.y = a.y/l,.z = a.z/l}; }
+internal vec3_f32 cross_3f32(vec3_f32 a, vec3_f32 b)            { return (vec3_f32) {.x = a.y*b.z - a.z*b.y,.y = -(a.x*b.z - a.z*b.x),.z = a.x*b.y - a.y*b.x}; }
+internal vec3_f32 reflect_3f32(vec3_f32 i, vec3_f32 n)          { return sub_3f32(i, mul_3f32(n, 2.f*dot_3f32(i, n))); }
+internal vec3_f32 lerp_3f32(vec3_f32 x, vec3_f32 y, f32 a)      { return (vec3_f32) {.x = (1.f-a)*x.x + a*y.x,.y = (1.f-a)*x.y + a*y.y,.z = (1.f-a)*x.z + a*y.z}; }
+internal vec3_f32 max_3f32(vec3_f32 a, vec3_f32 b)              { return (vec3_f32) {.x = Max(a.x,b.x),.y = Max(a.y,b.y),.z = Max(a.z,b.z)}; }
+internal vec3_f32 min_3f32(vec3_f32 a, vec3_f32 b)              { return (vec3_f32) {.x = Min(a.x,b.x),.y = Min(a.y,b.y),.z = Min(a.z,b.z)}; }
+internal vec3_f32 addscl_3f32(vec3_f32 a, f32 b)                { return (vec3_f32) {.x = a.x + b,.y = a.y + b,.z = a.z + b}; }
+internal vec3_f32 abs_3f32(vec3_f32 x)                          { return (vec3_f32) {.x = abs_f32(x.x),.y = abs_f32(x.y),.z = abs_f32(x.z)}; }
+internal vec3_f32 rand_unit_cube_3f32()                         { return (vec3_f32) {.x = rand_unit_f32(),.y = rand_unit_f32(),.z = rand_unit_f32()}; }
+internal vec3_f32 refract_3f32(vec3_f32 i, vec3_f32 n, f32 eta) {
+    f32 ndoti = dot_3f32(n, i);
+    f32 k = 1.f - eta*eta*(1.f - ndoti*ndoti);
+    if (k < 0.f)
+        return make_3f32(0.f,0.f,0.f);
+    return sub_3f32(mul_3f32(i, eta), mul_3f32(n, eta*ndoti + sqrt_f32(k)));
+}
 internal vec3_f32 rand_unit_sphere_3f32() {
     for (;;) { // @todo
         vec3_f32 s = rand_unit_cube_3f32();
