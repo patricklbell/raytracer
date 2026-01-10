@@ -15,6 +15,7 @@ bool rt_is_zero_handle(RT_Handle handle);
 
 typedef enum RT_MaterialType {
     RT_MaterialType_Lambertian,
+    RT_MaterialType_Metal,
     RT_MaterialType_Normal,
     RT_MaterialType_Count ENUM_CASE_UNUSED,
 } RT_MaterialType;
@@ -23,6 +24,7 @@ typedef struct RT_Material RT_Material;
 struct RT_Material {
     RT_MaterialType type;
     vec3_f32 albedo;
+    f32 roughness;
 };
 
 typedef struct RT_MaterialNode RT_MaterialNode;

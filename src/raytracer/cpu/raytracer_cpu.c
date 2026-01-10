@@ -108,6 +108,19 @@ vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, u8 
             vec3_f32 i_radiance = rt_cpu_trace_ray(tracer, &i_ray, depth-1, rt_cpu_make_pos_interval(), &i_record);
             return elmul_3f32(i_radiance, mat->albedo);
         }break;
+        case RT_MaterialType_Metal:{
+            vec3_f32 i = normalize_3f32(reflect_3f32(in_ray->direction, in_record->n));
+            // approximation of specular lobe
+            i = add_3f32(i, mul_3f32(rand_unit_sphere_3f32(), mat->roughness));
+
+            RT_CPU_Ray i_ray = {
+                .origin=add_3f32(in_record->p, mul_3f32(in_record->n, 0.001f)),
+                .direction=i,
+            };
+            RT_CPU_HitRecord i_record;
+            
+            return rt_cpu_trace_ray(tracer, &i_ray, depth-1, rt_cpu_make_pos_interval(), &i_record);
+        }break;
         case RT_MaterialType_Normal:{
             return rt_cpu_normal_to_radiance(in_record->n);
         }break;
