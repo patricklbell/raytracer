@@ -348,3 +348,7 @@ internal u64 hash_u64(u8* buffer, u64 size) {
   }
   return result;
 }
+
+internal void rand_seed(u64 seed) {
+    srand((unsigned int)seed);
+}

@@ -12,10 +12,12 @@ int main(int argc, char** argv) {
     DEMO_Settings settings = {
         .width=DEFAULT_WIDTH,
         .height=DEFAULT_HEIGHT,
+        .samples=1,
     };
 
     // argument parsing
     int positional_i = 0;
+    int seed = 0;
     for (int i = 1; i < argc; i++) {
         NTString8 arg = make_ntstr8(argv[i], strlen(argv[i]));
         
@@ -39,6 +41,19 @@ int main(int argc, char** argv) {
                 fprintf(stderr, "invalid HEIGHT argument");
                 bad = true;
             }
+        } else if (ntstr8_begins_with(arg, "--samples")) {
+            int samples;
+            if (sscanf(arg.cstr, "--samples=%d", &samples) != 1 || samples <= 0 || samples > 255) {
+                fprintf(stderr, "invalid SAMPLES argument");
+                bad = true;
+            } else {
+                settings.samples = (u8)samples;
+            }
+        } else if (ntstr8_begins_with(arg, "--seed")) {
+            if (sscanf(arg.cstr, "--seed=%d", &seed) != 1) {
+                fprintf(stderr, "invalid SEED argument");
+                bad = true;
+            }
         } else {
             fprintf(stderr, "invalid argument \"%s\", skipping\n", arg.cstr);
         }
@@ -57,10 +72,16 @@ int main(int argc, char** argv) {
             "Options:\n"
             "   -h, --help          show this help message\n"
             "   --width=WIDTH       set width of image to WIDTH pixels. defaults to %d\n"
-            "   --height=HEIGHT     set height of image to HEIGHT pixels. defaults to %d\n",
-            argv[0], DEFAULT_WIDTH, DEFAULT_HEIGHT
+            "   --height=HEIGHT     set height of image to HEIGHT pixels. defaults to %d\n"
+            "   --samples=SAMPLES   set number of samples per pixel to SAMPLES x SAMPLES. defaults to 1\n"
+            "   --seed=SEED         seeds all random number generators\n",
+            DEFAULT_WIDTH, DEFAULT_HEIGHT
         );
         return !help;
+    }
+
+    if (seed != 0) {
+        rand_seed((u64)seed);
     }
 
     // call demo hook

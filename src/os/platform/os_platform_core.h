@@ -28,3 +28,7 @@ internal void      os_read_line_to_buffer_ml(OS_Handle file, NTString8* str, u64
 
 // time
 internal f64 os_now_seconds();
+
+// random
+internal void rand_seed(u64 seed);
+internal u64  rand_u64();

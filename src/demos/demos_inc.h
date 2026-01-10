@@ -14,6 +14,7 @@ typedef struct DEMO_Settings DEMO_Settings;
 struct DEMO_Settings {
     int         width;
     int         height;
+    u8          samples;
     NTString8   out; 
 };
 

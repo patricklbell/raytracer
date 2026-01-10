@@ -15,7 +15,7 @@ struct RT_CPU_HitRecord {
     vec3_f32 n;
     f32 t;
 
-    RT_Entity* entity;
+    RT_Handle material;
 };
 
 struct RT_CPU_Tracer {

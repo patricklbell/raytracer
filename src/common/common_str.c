@@ -23,7 +23,7 @@ internal b8 ntstr8_eq(NTString8 a, NTString8 b) {
         return false;
 
     for (u64 i = 0; i < a.length; i++) {
-    if (a.cstr[i] != a.cstr[i])
+        if (a.cstr[i] != b.cstr[i])
             return false;
     }
     return true;

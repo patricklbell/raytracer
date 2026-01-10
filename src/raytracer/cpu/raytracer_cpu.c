@@ -33,42 +33,99 @@ rt_hook void rt_tracer_cast(RT_Handle handle, RT_CastSettings settings, vec3_f32
 void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_color, int width, int height) {
     vec3_f32 z_extents = (vec3_f32){.xy=s->z_extents, ._z=s->z_near};
     vec3_f32 right = cross_3f32(s->forward, s->up);
+    f32 x_norm_sample_size = 1.f/(f32)(width *s->samples);
+    f32 y_norm_sample_size = 1.f/(f32)(height*s->samples);
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             vec3_f32* c = &out_color[y*width + x];
-
-            RT_CPU_Ray ray;
-            vec3_f32 ndc = make_3f32(2.f*(f32)x/width - 1.0f, 1.0f - 2.f*(f32)y/height, 1.f);
-            vec3_f32 view = elmul_3f32(ndc, z_extents);
-            vec3_f32 near = add_3f32(add_3f32(
-                mul_3f32(right,         view.x),
-                mul_3f32(s->up,         view.y)),
-                mul_3f32(s->forward,    view.z)
-            );
-            ray.origin = add_3f32(s->eye, near);
-            ray.direction = normalize_3f32(near);
-
-            RT_CPU_HitRecord record;
-            if (rt_cpu_trace_ray(tracer, &ray, (RT_CPU_Interval){0.00001, MAX_F32}, &record)) {
-                *c = rt_cpu_closest_hit(tracer, &ray, &record);
-            } else {
-                *c = rt_cpu_miss(tracer, &ray);
+            
+            *c = zero_struct;
+            for (int y_sample = 0; y_sample < s->samples; y_sample++) {
+                for (int x_sample = 0; x_sample < s->samples; x_sample++) {
+                    
+                    f32 x_norm = ((f32)x/width ) + ((f32)x_sample/s->samples)*x_norm_sample_size;
+                    f32 y_norm = ((f32)y/height) + ((f32)y_sample/s->samples)*y_norm_sample_size;
+                    // either add blue noise or center the sample
+                    if (s->samples > 1) {
+                        x_norm += rand_unit_f32()*x_norm_sample_size;
+                        y_norm += rand_unit_f32()*y_norm_sample_size;
+                    } else {
+                        x_norm += 0.5f*x_norm_sample_size;
+                        y_norm += 0.5f*y_norm_sample_size;
+                    }
+                    
+                    // @note (0,0) -> TL, (w,h) -> BR
+                    vec3_f32 ndc = make_3f32(2.f*x_norm - 1.f, 1.f - 2.f*y_norm, 1.f);
+                    vec3_f32 view = elmul_3f32(ndc, z_extents);
+                    vec3_f32 near = add_3f32(add_3f32(
+                        mul_3f32(right,         view.x),
+                        mul_3f32(s->up,         view.y)),
+                        mul_3f32(s->forward,    view.z)
+                    );
+                    
+                    RT_CPU_Ray ray;
+                    ray.origin = add_3f32(s->eye, near);
+                    ray.direction = normalize_3f32(near);
+        
+                    RT_CPU_HitRecord record;
+                    if (rt_cpu_trace_ray(tracer, &ray, (RT_CPU_Interval){0.00001, MAX_F32}, &record)) {
+                        *c = add_3f32(*c, rt_cpu_closest_hit(tracer, &ray, &record));
+                    } else {
+                        *c = add_3f32(*c, rt_cpu_miss(tracer, &ray));
+                    }
+                }
             }
+            *c = mul_3f32(*c, 1.f/(f32)s->samples);
         }
     }
 }
 
 bool rt_cpu_trace_ray(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
-    RT_Sphere test = {
-        .center = make_3f32(0,0,0),
-        .radius = 1.0f,
-    };
-    return rt_cpu_trace_ray_sphere(tracer, &test, in_ray, interval, out_record);
+    bool hit = false;
+
+    for EachList(en, RT_EntityNode, tracer->world->entities.first) {
+        RT_Entity* entity = &en->v;
+
+        // @note out_record is overwritten, assumes hits are always valid
+        bool hit_entity = false;
+        switch (entity->type) {
+            case RT_EntityType_Sphere:{
+                hit_entity = rt_cpu_trace_ray_sphere(tracer, &entity->sphere, in_ray, interval, out_record);
+            }break;
+        }
+
+        if (hit_entity) {
+            hit = true;
+            interval.max = out_record->t;
+            out_record->material = entity->material;
+        }
+    }
+    
+    return hit;
+}
+
+static vec3_f32 rt_cpu_normal_to_color(vec3_f32 normal) {
+    return mul_3f32(add_3f32(normal, make_3f32(1.f,1.f,1.f)), 0.5f);
 }
 
 vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, const RT_CPU_Ray* ray, RT_CPU_HitRecord* in_record) {
-    return make_3f32(1,0,0);
+    if (rt_is_zero_handle(in_record->material)) {
+        return make_3f32(1.f, 0.f, 1.f);
+    }
+
+    RT_Material* mat = &((RT_MaterialNode*)in_record->material.v64[0])->v;
+    switch (mat->type) {
+        case RT_MaterialType_Lambertian:{
+            return mat->albedo;
+        }break;
+        case RT_MaterialType_Normal:{
+            return rt_cpu_normal_to_color(in_record->n);
+        }break;
+    }
+
+    Assert(false);
+    return (vec3_f32){};
 }
 vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, const RT_CPU_Ray* ray) {
     return make_3f32(0,0,0);
