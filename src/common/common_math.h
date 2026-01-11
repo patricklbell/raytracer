@@ -18,6 +18,8 @@ internal vec2_f32 elmul_2f32(vec2_f32 a, vec2_f32 b);
 internal f32 dot_2f32(vec2_f32 a, vec2_f32 b);
 internal f32 length_2f32(vec2_f32 a);
 internal vec2_f32 normalize_2f32(vec2_f32 a);
+internal vec2_f32 rand_unit_cube_2f32();
+internal vec2_f32 rand_unit_sphere_2f32();
 
 #define length2_2f32(a) dot_2f32(a,a)
 

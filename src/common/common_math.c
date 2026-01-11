@@ -6,6 +6,14 @@ internal vec2_f32 elmul_2f32(vec2_f32 a, vec2_f32 b)         { return (vec2_f32)
 internal f32      dot_2f32(vec2_f32 a, vec2_f32 b)           { return a.x*b.x + a.y*b.y; }
 internal f32      length_2f32(vec2_f32 a)                    { return sqrt_f32(a.x*a.x + a.y*a.y); }
 internal vec2_f32 normalize_2f32(vec2_f32 a)                 { f32 l = length_2f32(a); return (vec2_f32) {.x = a.x/l,.y = a.y/l}; }
+internal vec2_f32 rand_unit_cube_2f32()                      { return (vec2_f32) {.x = rand_unit_f32(),.y = rand_unit_f32()}; }
+internal vec2_f32 rand_unit_sphere_2f32() {
+    for (;;) { // @todo
+        vec2_f32 s = rand_unit_cube_2f32();
+        if (length2_2f32(s) <= 1.f)
+            return s;
+    }
+}
    
 internal vec3_f32 make_3f32(f32 x, f32 y, f32 z)                { return (vec3_f32) {.x=x,.y=y,.z=z}; }
 internal vec3_f32 make_scale_3f32(f32 s)                        { return (vec3_f32) {.x=s,.y=s,.z=s}; }

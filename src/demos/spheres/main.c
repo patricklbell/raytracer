@@ -35,7 +35,8 @@ static void add_dieletric_sphere(RT_World* world, vec3_f32 center, f32 radius, f
 demo_hook void render(const DEMO_Settings* settings) {
     {DeferResource(RT_World* world = rt_make_world((RT_WorldSettings){}), rt_world_cleanup(world)) {
         add_dieletric_sphere(world, make_3f32(0,0,0), 1.0, 1.52);
-        add_dieletric_sphere(world, make_3f32(0,0,0), 0.8, 1.0);
+        // add_dieletric_sphere(world, make_3f32(0,0,0), 0.8, 1.0);
+        add_lambertian_sphere(world, make_3f32(0,0,0), 0.8, make_3f32(0.8,0.5,0.5));
         add_metal_sphere(world, make_3f32(-1.6,0,0), 0.5, 0.1);
         add_metal_sphere(world, make_3f32(+1.6,0,0), 0.5, 0.9);
         // add_dieletric_sphere(world, make_3f32(0,+1.6,0), 0.5, 1.52);
@@ -48,9 +49,16 @@ demo_hook void render(const DEMO_Settings* settings) {
             rt_tracer_load_world(tracer, world);
             {DeferResource(Temp scratch = scratch_begin(NULL, 0), scratch_end(scratch)) {
                 int width = settings->width, height = settings->height;
-                f32 aspect_ratio = (f32)width/height;
-
                 vec3_f32* buffer = push_array(scratch.arena, vec3_f32, width*height);
+                
+                f32 aspect_ratio = (f32)width/height;
+                f32 vfov = DegreesToRad(45);
+                f32 focus_distance = 2.5f;
+                f32 defocus_angle = DegreesToRad(5);
+
+                f32 h = tan_f32(vfov/2.f);
+                f32 focus_plane_height = 2*h*focus_distance;
+                f32 defocus_radius = focus_distance*tan_f32(defocus_angle/2.f);
 
                 rt_tracer_cast(
                     tracer, 
@@ -58,10 +66,11 @@ demo_hook void render(const DEMO_Settings* settings) {
                         .eye=make_3f32(0,0,2.5),
                         .up=make_3f32(0,1,0),
                         .forward=make_3f32(0,0,-1),
-                        .z_extents=make_2f32(0.1*aspect_ratio, 0.1),
-                        .z_near=0.1,
+                        .viewport=make_3f32(focus_plane_height*aspect_ratio, focus_plane_height, focus_distance),
                         .samples=settings->samples,
                         .ior=1.f,
+                        .defocus=true,
+                        .defocus_disk=make_2f32(defocus_radius, defocus_radius),
                     },
                     buffer, width, height
                 );

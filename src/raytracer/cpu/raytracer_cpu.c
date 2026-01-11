@@ -34,7 +34,6 @@ rt_hook void rt_tracer_cast(RT_Handle handle, RT_CastSettings settings, vec3_f32
 // cpu kernels
 // ============================================================================
 void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {
-    vec3_f32 z_extents = (vec3_f32){.xy=s->z_extents, ._z=s->z_near};
     vec3_f32 right = cross_3f32(s->forward, s->up);
     f32 x_norm_sample_size = 1.f/(f32)(width *s->samples);
     f32 y_norm_sample_size = 1.f/(f32)(height*s->samples);
@@ -60,16 +59,29 @@ void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* ou
                     
                     // @note (0,0) -> TL, (w,h) -> BR
                     vec3_f32 ndc = make_3f32(2.f*x_norm - 1.f, 1.f - 2.f*y_norm, 1.f);
-                    vec3_f32 view = elmul_3f32(ndc, z_extents);
-                    vec3_f32 near = add_3f32(add_3f32(
-                        mul_3f32(right,         view.x),
-                        mul_3f32(s->up,         view.y)),
-                        mul_3f32(s->forward,    view.z)
-                    );
+                    vec3_f32 view = elmul_3f32(ndc, s->viewport);
                     
+                    // map to world space and defocus
+                    vec3_f32 sample = add_3f32(add_3f32(add_3f32(
+                        s->eye,
+                        mul_3f32(right,      view.x)),
+                        mul_3f32(s->up,      view.y)),
+                        mul_3f32(s->forward, view.z)
+                    );
+                    vec3_f32 origin;
+                    if (s->defocus) {
+                        vec2_f32 disk_sample = elmul_2f32(rand_unit_sphere_2f32(), s->defocus_disk);
+                        origin = add_3f32(add_3f32(s->eye,
+                            mul_3f32(right, disk_sample.x)),
+                            mul_3f32(s->up, disk_sample.y)
+                        );
+                    } else {
+                        origin = s->eye;
+                    }
+
                     RT_CPU_Ray ray = {
-                        .origin = add_3f32(s->eye, near),
-                        .direction = near,
+                        .origin = origin,
+                        .direction = sub_3f32(sample, origin),
                     };
         
                     RT_CPU_TraceContext ctx = zero_struct;

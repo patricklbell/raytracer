@@ -112,10 +112,13 @@ struct RT_CastSettings {
     vec3_f32 eye;
     vec3_f32 up;
     vec3_f32 forward;
-    vec2_f32 z_extents;
-    f32 z_near;
+    vec3_f32 viewport;
+
     u8 samples;
     f32 ior;
+
+    bool defocus;
+    vec2_f32 defocus_disk;
 };
 
 rt_hook RT_Handle rt_make_tracer(RT_TracerSettings settings);
