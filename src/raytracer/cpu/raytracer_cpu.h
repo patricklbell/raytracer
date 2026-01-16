@@ -1,17 +1,5 @@
 #pragma once
 
-typedef struct RT_CPU_Ray RT_CPU_Ray;
-struct RT_CPU_Ray {
-    vec3_f32 origin;
-    vec3_f32 direction;
-};
-
-typedef struct RT_CPU_Interval RT_CPU_Interval;
-struct RT_CPU_Interval {
-    f32 min;
-    f32 max;
-};
-
 typedef struct RT_CPU_HitRecord RT_CPU_HitRecord;
 struct RT_CPU_HitRecord {
     vec3_f32 p;
@@ -21,11 +9,19 @@ struct RT_CPU_HitRecord {
     RT_Handle material;
 };
 
+typedef struct RT_CPU_TLAS RT_CPU_TLAS;
+struct RT_CPU_TLAS {
+    LBVH_Tree* lbvh;
+};
+
 typedef struct RT_CPU_Tracer RT_CPU_Tracer;
 struct RT_CPU_Tracer {
     Arena* arena;
     RT_World* world;
     u8 max_bounces;
+
+    Arena* as_arena;
+    RT_CPU_TLAS tlas;
 };
 
 typedef struct RT_CPU_TraceContext RT_CPU_TraceContext;
@@ -34,26 +30,35 @@ struct RT_CPU_TraceContext {
     f32 ior[RT_MAX_MAX_BOUNCES];
 };
 
-RT_CPU_Tracer* rt_cpu_handle_to_tracer(RT_Handle handle);
-RT_Handle      rt_cpu_tracer_to_handle(RT_CPU_Tracer* tracer);
+internal RT_CPU_Tracer* rt_cpu_handle_to_tracer(RT_Handle handle);
+internal RT_Handle      rt_cpu_tracer_to_handle(RT_CPU_Tracer* tracer);
+
+// ============================================================================
+// acceleration structures
+// ============================================================================
+
+internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, RT_World* world);
 
 // ============================================================================
 // cpu kernels
 // ============================================================================
-void        rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* settings, vec3_f32* out_radiance, int width, int height);
-vec3_f32    rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record);
-vec3_f32    rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth, RT_CPU_HitRecord* in_record);
-vec3_f32    rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth);
+internal void     rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* settings, vec3_f32* out_radiance, int width, int height);
+internal vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth, rng_f32 interval, RT_CPU_HitRecord* out_record);
+internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth, RT_CPU_HitRecord* in_record);
+internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth);
+
+// ============================================================================
+// intersection
+// ============================================================================
+internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record);
+internal bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record);
 
 // ============================================================================
 // helpers
 // ============================================================================
-bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record);
-bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record);
+internal rng_f32 rt_cpu_make_pos_interval();
+internal bool rt_cpu_in_interval(f32 x, const rng_f32* in_interval);
 
-RT_CPU_Interval rt_cpu_make_pos_interval();
-bool rt_cpu_in_interval(f32 x, const RT_CPU_Interval* in_interval);
-
-vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal);
-f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta);
-vec3_f32 rt_cpu_normal_to_radiance(vec3_f32 normal);
+internal vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal);
+internal f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta);
+internal vec3_f32 rt_cpu_normal_to_radiance(vec3_f32 normal);

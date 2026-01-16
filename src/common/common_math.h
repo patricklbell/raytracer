@@ -191,17 +191,66 @@ internal mat4x4_f32 scale_4x4f32(mat4x4_f32 a, f32 b);
 internal mat4x4_f32 inv_4x4f32(mat4x4_f32 m);
 internal mat4x4_f32 transpose_4x4f32(mat4x4_f32 m);
 
-typedef union rect_f32 rect_f32;
-union rect_f32 {
+
+typedef union rng_f32 rng_f32;
+union rng_f32 {
+    struct {
+        f32 a;
+        f32 b;
+    };
+    struct {
+        f32 min;
+        f32 max;
+    };
+    f32 v[2];
+};
+
+internal rng_f32 make_rng_f32(f32 a, f32 b);
+internal bool    in_rng_f32(rng_f32 x, f32 q);
+internal rng_f32 merge_rng_f32(rng_f32 x, rng_f32 y);
+
+
+typedef union rng2_f32 rng2_f32;
+union rng2_f32 {
+    struct {
+        vec2_f32 a;
+        vec2_f32 b;
+    };
     struct {
         vec2_f32 tl;
         vec2_f32 br;
     };
+    struct {
+        vec2_f32 min;
+        vec2_f32 max;
+    };
     vec2_f32 v[2];
 };
 
-internal rect_f32 make_rect_f32(vec2_f32 tl, vec2_f32 br);
+internal rng2_f32 make_rng2_f32(vec2_f32 a, vec2_f32 b);
+// internal bool     in_rng2_f32(rng2_f32 x, vec2_f32 q);
+// internal rng2_f32 merge_rng2_f32(rng2_f32 x, rng2_f32 y);
 
+typedef union rng3_f32 rng3_f32;
+union rng3_f32 {
+    struct {
+        vec3_f32 a;
+        vec3_f32 b;
+    };
+    struct {
+        vec3_f32 min;
+        vec3_f32 max;
+    };
+    struct {
+        vec3_f32 origin;
+        vec3_f32 direction;
+    };
+    vec3_f32 v[2];
+};
+
+internal rng3_f32 make_rng3_f32(vec3_f32 a, vec3_f32 b);
+// internal bool     in_rng3_f32(rng3_f32 x, vec3_f32 q);
+internal rng3_f32 merge_rng3_f32(rng3_f32 x, rng3_f32 y);
 
 
 #define PI_F32           3.1415926535897932384626433832795028841971693993751058209749445923078164062f

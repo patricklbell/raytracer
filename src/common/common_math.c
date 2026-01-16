@@ -364,9 +364,14 @@ internal mat4x4_f32 transpose_4x4f32(mat4x4_f32 m) {
     }};
 }
 
-internal rect_f32 make_rect_f32(vec2_f32 tl, vec2_f32 br) {
-    return (rect_f32) { .tl = tl, .br = br };
-}
+internal rng_f32  make_rng_f32(f32 a, f32 b)             { return (rng_f32 ){.a=a,.b=b}; }
+internal bool     in_rng_f32(rng_f32 x, f32 q)           { return q >= x.min && q <= x.max; }
+internal rng_f32  merge_rng_f32(rng_f32 x, rng_f32 y)    { return (rng_f32 ){.min=Min(x.min, y.min),.max=Max(x.max, y.max)}; }
+
+internal rng2_f32 make_rng2_f32(vec2_f32 a, vec2_f32 b)  { return (rng2_f32){.a=a,.b=b}; }
+
+internal rng3_f32 make_rng3_f32(vec3_f32 a, vec3_f32 b)  { return (rng3_f32){.a=a,.b=b}; }
+internal rng3_f32 merge_rng3_f32(rng3_f32 x, rng3_f32 y) { return (rng3_f32){.min=min_3f32(x.min,y.min),.max=max_3f32(x.max,y.max)}; }
 
 internal f32 smoothstep_f32(f32 edge_0, f32 edge_1, f32 x) {
     f32 t = Clamp((x - edge_0)/(edge_1 - edge_0), 0.f, 1.f);

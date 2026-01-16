@@ -275,4 +275,4 @@ typedef double   f64;
 
 // bit bashing
 internal u64 count_ones_u64(u64 x);
-internal u64 first_set_bit_u64(u64 x);
+internal u64 count_leading_zeros_u64(u64 x);

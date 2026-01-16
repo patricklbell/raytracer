@@ -1,5 +1,8 @@
 #include "common/common_inc.c"
 #include "os/os_inc.c"
+#include "geo/geo.c"
+#include "mesh/mesh.c"
+#include "lbvh/lbvh.c"
 #include "raytracer/raytracer_inc.c"
 
 int main(int argc, char** argv) {

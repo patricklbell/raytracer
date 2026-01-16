@@ -1,7 +1,7 @@
-RT_CPU_Tracer* rt_cpu_handle_to_tracer(RT_Handle handle) {
+internal RT_CPU_Tracer* rt_cpu_handle_to_tracer(RT_Handle handle) {
     return (RT_CPU_Tracer*)handle.v64[0];
 }
-RT_Handle rt_cpu_tracer_to_handle(RT_CPU_Tracer* tracer) {
+internal RT_Handle rt_cpu_tracer_to_handle(RT_CPU_Tracer* tracer) {
     RT_Handle handle = zero_struct;
     handle.v64[0] = (u64)tracer;
     return handle;
@@ -14,14 +14,22 @@ rt_hook RT_Handle rt_make_tracer(RT_TracerSettings settings) {
     RT_CPU_Tracer* tracer = push_array(arena, RT_CPU_Tracer, 1);
     tracer->arena = arena;
     tracer->max_bounces = settings.max_bounces;
+    tracer->as_arena = arena_alloc();
     return rt_cpu_tracer_to_handle(tracer);
 }
 rt_hook void rt_tracer_load_world(RT_Handle handle, RT_World* world) {
     RT_CPU_Tracer* tracer = rt_cpu_handle_to_tracer(handle);
+    
     tracer->world = world;
+    
+    // build tlas
+    // @todo blas
+    arena_clear(tracer->as_arena);
+    rt_cpu_build_tlas(&tracer->tlas, tracer->as_arena, world);
 }
 rt_hook void rt_tracer_cleanup(RT_Handle handle) {
     RT_CPU_Tracer* tracer = rt_cpu_handle_to_tracer(handle);
+    arena_release(tracer->as_arena);
     arena_release(tracer->arena);
 }
 
@@ -31,9 +39,91 @@ rt_hook void rt_tracer_cast(RT_Handle handle, RT_CastSettings settings, vec3_f32
 }
 
 // ============================================================================
+// acceleration structures
+// ============================================================================
+static u64 rt_cpu_c_to_morton_code(vec3_f32 c, vec3_f32 min, vec3_f32 extents) {
+    const u64 bits = sizeof(u64)*8 / 3;
+    vec3_f32 norm = eldiv_3f32(sub_3f32(c, min), extents);
+
+    u32 x = (u32)((f64)norm.x/(f64)(1 << bits));
+    u32 y = (u32)((f64)norm.y/(f64)(1 << bits));
+    u32 z = (u32)((f64)norm.z/(f64)(1 << bits));
+
+    u64 morton_code = 0;
+    for EachIndex(idx, bits) {
+        morton_code |= ((x >> idx) & 1) << (idx*3 + 0);
+        morton_code |= ((y >> idx) & 1) << (idx*3 + 1);
+        morton_code |= ((z >> idx) & 1) << (idx*3 + 2);
+    }
+
+    return morton_code;
+}
+
+static vec3_f32 rt_cpu_entity_to_c(RT_Entity* entity) {
+    switch (entity->type) {
+        case RT_EntityType_Sphere:{
+            return entity->sphere.center;
+        }break;
+    }
+
+    AssertAlways(false);
+    return (vec3_f32){};
+}
+
+static rng3_f32 rt_cpu_entity_to_aabb(RT_Entity* entity) {
+    switch (entity->type) {
+        case RT_EntityType_Sphere:{
+            vec3_f32 r = make_scale_3f32(entity->sphere.radius);
+            return make_rng3_f32(sub_3f32(entity->sphere.center, r), add_3f32(entity->sphere.center, r));
+        }break;
+    }
+
+    AssertAlways(false);
+    return (rng3_f32){};
+}
+
+internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, RT_World* world) {
+    RT_EntityList* list = &world->entities;
+    
+    {DeferResource(Temp scratch = scratch_begin(NULL, 0), scratch_end(scratch)) {
+        LBVH_MortonValue* lbvh_morton_codes = push_array_no_zero(scratch.arena, LBVH_MortonValue, list->length);
+    
+        // determine min and extents of entity centers
+        vec3_f32 min = make_scale_3f32(MIN_F32), max = make_scale_3f32(MAX_F32);
+        for EachList(node, RT_EntityNode, list->first) {
+            RT_Entity* entity = &node->v;
+    
+            vec3_f32 c = rt_cpu_entity_to_c(entity);
+            min = min_3f32(min, c);
+            max = max_3f32(max, c);
+        }
+        vec3_f32 extents = sub_3f32(max, min);
+    
+        // calculate morton codes
+        u64 idx = 0;
+        for EachList(node, RT_EntityNode, list->first) {
+            RT_Entity* entity = &node->v;
+    
+            vec3_f32 c = rt_cpu_entity_to_c(entity);
+
+            lbvh_morton_codes[idx].morton_code = rt_cpu_c_to_morton_code(c, min, extents);
+            lbvh_morton_codes[idx].aabb = rt_cpu_entity_to_aabb(entity);
+            lbvh_morton_codes[idx].value = (void*)entity;
+            idx++;
+        }
+    
+        // build lbvh
+        out_tlas->lbvh = lbvh_make(arena, lbvh_morton_codes, list->length);
+        #ifdef BUILD_DEBUG
+            lbvh_dump_to_file(out_tlas->lbvh, "out.bvh");
+        #endif
+    }}
+}
+
+// ============================================================================
 // cpu kernels
 // ============================================================================
-void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {
+internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {
     vec3_f32 right = cross_3f32(s->forward, s->up);
     f32 x_norm_sample_size = 1.f/(f32)(width *s->samples);
     f32 y_norm_sample_size = 1.f/(f32)(height*s->samples);
@@ -79,7 +169,7 @@ void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* ou
                         origin = s->eye;
                     }
 
-                    RT_CPU_Ray ray = {
+                    rng3_f32 ray = {
                         .origin = origin,
                         .direction = sub_3f32(sample, origin),
                     };
@@ -95,7 +185,7 @@ void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* ou
     }
 }
 
-vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
+internal vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth, rng_f32 interval, RT_CPU_HitRecord* out_record) {
     if (depth == 0) {
         return make_scale_3f32(0.f);
     }
@@ -108,7 +198,7 @@ vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const
 
 #define RT_CPU_SURFACE_OFFSET 0.001f
 
-vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth, RT_CPU_HitRecord* in_record) {
+internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth, RT_CPU_HitRecord* in_record) {
     if (rt_is_zero_handle(in_record->material)) {
         return make_scale_3f32(1.f);
     }
@@ -116,7 +206,7 @@ vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, con
     RT_Material* mat = &((RT_MaterialNode*)in_record->material.v64[0])->v;
     switch (mat->type) {
         case RT_MaterialType_Lambertian:{
-            RT_CPU_Ray r_ray = {
+            rng3_f32 r_ray = {
                 .origin = add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
                 .direction = rt_cpu_cosine_sample(in_record->n),
             };
@@ -137,7 +227,7 @@ vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, con
             bool tir = sqrt_f32(1-idotn*idotn)*eta > 1.f;
             bool reflect = tir || rt_cpu_fresnel_schlick(eta_i, eta_t, abs_f32(idotn)) > rand_unit_f32();
 
-            RT_CPU_Ray s_ray = *in_ray;
+            rng3_f32 s_ray = *in_ray;
             if (reflect) {
                 s_ray = {
                     .origin=add_3f32(in_record->p, mul_3f32(n_corr, RT_CPU_SURFACE_OFFSET)),
@@ -165,7 +255,7 @@ vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, con
             // approximation of specular lobe
             i = add_3f32(i, mul_3f32(rand_unit_sphere_3f32(), mat->roughness));
 
-            RT_CPU_Ray i_ray = {
+            rng3_f32 i_ray = {
                 .origin=add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
                 .direction=i,
             };
@@ -181,7 +271,7 @@ vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, con
     return make_3f32(0,0,0);
 }
 
-vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth) {
+internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth) {
     f32 y = Clamp(in_ray->direction.y, 0.f, 1.f);
     f32 t = pow_f32(y, 0.5f);
 
@@ -193,33 +283,39 @@ vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_C
 }
 
 // ============================================================================
-// helpers
+// intersection
 // ============================================================================
-bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
+struct RT_CPU_LBVHData {
+    RT_CPU_HitRecord* hit_record;
+    RT_CPU_Tracer* tracer;
+};
+static bool rt_cpu_lbvh_hit(void* value, const rng3_f32* in_ray, rng_f32* inout_t_interval, void* data) {
+    RT_Entity* entity = (RT_Entity*)value;
+    RT_CPU_LBVHData* rt_cpu_data = (RT_CPU_LBVHData*)data;
+
     bool hit = false;
-
-    for EachList(en, RT_EntityNode, tracer->world->entities.first) {
-        RT_Entity* entity = &en->v;
-
-        // @note out_record is overwritten, assumes hits are always valid
-        bool hit_entity = false;
-        switch (entity->type) {
-            case RT_EntityType_Sphere:{
-                hit_entity = rt_cpu_intersect_sphere(tracer, &entity->sphere, in_ray, interval, out_record);
-            }break;
-        }
-
-        if (hit_entity) {
-            hit = true;
-            interval.max = out_record->t;
-            out_record->material = entity->material;
-        }
+    switch (entity->type) {
+        case RT_EntityType_Sphere:{
+            hit = rt_cpu_intersect_sphere(rt_cpu_data->tracer, &entity->sphere, in_ray, *inout_t_interval, rt_cpu_data->hit_record);
+        }break;
     }
-    
+
+    if (hit) {
+        inout_t_interval->max = rt_cpu_data->hit_record->t;
+        rt_cpu_data->hit_record->material = entity->material;
+    }
     return hit;
 }
 
-bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const RT_CPU_Ray* in_ray, RT_CPU_Interval interval, RT_CPU_HitRecord* out_record) {
+internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
+    RT_CPU_LBVHData rt_cpu_data = {
+        .hit_record = out_record,
+        .tracer = tracer,
+    };
+    return lbvh_query_ray(tracer->tlas.lbvh, in_ray, &interval, &rt_cpu_lbvh_hit, (void*)&rt_cpu_data);
+}
+
+internal bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
     Assert(in_sphere->radius > 0.f);
 
     // Sphere: |p - c|^2 = r^2
@@ -253,23 +349,26 @@ bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, 
     return true;
 }
 
-RT_CPU_Interval rt_cpu_make_pos_interval() {
-    return (RT_CPU_Interval){EPSILON_F32, MAX_F32};
+// ============================================================================
+// helpers
+// ============================================================================
+internal rng_f32 rt_cpu_make_pos_interval() {
+    return (rng_f32){EPSILON_F32, MAX_F32};
 }
-bool rt_cpu_in_interval(f32 x, const RT_CPU_Interval* in_interval) {
+internal bool rt_cpu_in_interval(f32 x, const rng_f32* in_interval) {
     return x >= in_interval->min && x <= in_interval->max; 
 }
 
-vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal) {
+internal vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal) {
     vec3_f32 i = add_3f32(rand_unit_sphere_3f32(), normal);
     bool near_zero = all_3b(leq_3f32_f32(abs_3f32(i), EPSILON_F32));
     return near_zero ? normal : i;
 }
-f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta) {
+internal f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta) {
     f32 sqrt_R0 = (eta_i - eta_t) / (eta_i + eta_t);
     f32 R0 = sqrt_R0*sqrt_R0;
     return R0 + (1.f- R0)*pow_f32(1.f - cos_theta, 5.f);
 }
-vec3_f32 rt_cpu_normal_to_radiance(vec3_f32 normal) {
+internal vec3_f32 rt_cpu_normal_to_radiance(vec3_f32 normal) {
     return mul_3f32(add_3f32(normal, make_3f32(1.f,1.f,1.f)), 0.5f);
 }

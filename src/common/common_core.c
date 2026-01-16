@@ -2,11 +2,14 @@
     internal u64 count_ones_u64(u64 x) {
         return (u64)__builtin_popcountll(x);
     }
-    internal u64 first_set_bit_u64(u64 x) {
+    internal u64 count_trailing_zeros_u64(u64 x) {
         Assert(x != 0);
         return (u64)__builtin_ctzll(x);
     }
-
+    internal u64 count_leading_zeros_u64(u64 x) {
+        Assert(x != 0);
+        return (u64)__builtin_clzll(x);
+    }
 #elif COMPILER_MSVC
 
     #include <intrin.h>
@@ -18,13 +21,18 @@
         return __popcnt64(x);
         #endif
     }
-    internal u64 first_set_bit_u64(u64 x) {
+    internal u64 count_trailing_zeros_u64(u64 x) {
         Assert(x != 0);
         unsigned long index;
-        _BitScanForward64(&index, x);  // MSVC intrinsic
+        _BitScanForward64(&index, x);
         return (u64)index;
     }
-    
+    internal u64 count_leading_zeros_u64(u64 x) {
+        Assert(x != 0);
+        unsigned long index;
+        _BitScanReverse64(&index, x);
+        return 63 - (u64)index;
+    }
 #else
     #error Compiler not supported.
 #endif
