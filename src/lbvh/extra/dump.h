@@ -10,15 +10,14 @@ static void lvbh_dump_node(FILE* f, const LBVH_Node* node, int* id_counter) {
     int id = (*id_counter)++;
 
     fprintf(f,
-        "NODE %d %f %f %f %f %f %f %p\n",
+        "NODE %d %f %f %f %f %f %f\n",
         id,
         node->aabb.min.x,
         node->aabb.min.y,
         node->aabb.min.z,
         node->aabb.max.x,
         node->aabb.max.y,
-        node->aabb.max.z,
-        node->value
+        node->aabb.max.z
     );
 
     lvbh_dump_node(f, node->left, id_counter);
