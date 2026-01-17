@@ -14,60 +14,53 @@ rt_hook RT_Handle rt_make_tracer(RT_TracerSettings settings) {
     RT_CPU_Tracer* tracer = push_array(arena, RT_CPU_Tracer, 1);
     tracer->arena = arena;
     tracer->max_bounces = settings.max_bounces;
-    tracer->as_arena = arena_alloc();
+    tracer->blas_arena = arena_alloc();
+    tracer->tlas_arena = arena_alloc();
     return rt_cpu_tracer_to_handle(tracer);
 }
 rt_hook void rt_tracer_load_world(RT_Handle handle, RT_World* world) {
     RT_CPU_Tracer* tracer = rt_cpu_handle_to_tracer(handle);
     
-    tracer->world = world;
-    
-    // build tlas
-    // @todo blas
-    arena_clear(tracer->as_arena);
-    rt_cpu_build_tlas(&tracer->tlas, tracer->as_arena, world);
+    arena_clear(tracer->blas_arena);
+    rt_cpu_build_blas(&tracer->blas, tracer->blas_arena, world);
 }
 rt_hook void rt_tracer_cleanup(RT_Handle handle) {
     RT_CPU_Tracer* tracer = rt_cpu_handle_to_tracer(handle);
-    arena_release(tracer->as_arena);
+    arena_release(tracer->blas_arena);
+    arena_release(tracer->tlas_arena);
     arena_release(tracer->arena);
 }
 
 rt_hook void rt_tracer_cast(RT_Handle handle, RT_CastSettings settings, vec3_f32* out_radiance, int width, int height) {
     RT_CPU_Tracer* tracer = rt_cpu_handle_to_tracer(handle);
+
+    arena_clear(tracer->tlas_arena);
+    rt_cpu_build_tlas(&tracer->tlas, tracer->tlas_arena, &tracer->blas);
+
     rt_cpu_raygen(tracer, &settings, out_radiance, width, height);
 }
 
 // ============================================================================
 // acceleration structures
 // ============================================================================
-static u64 rt_cpu_c_to_morton_code(vec3_f32 c, vec3_f32 min, vec3_f32 extents) {
-    const u64 bits = sizeof(u64)*8 / 3;
-    vec3_f32 norm = eldiv_3f32(sub_3f32(c, min), extents);
-
-    u32 x = (u32)((f64)norm.x/(f64)(1 << bits));
-    u32 y = (u32)((f64)norm.y/(f64)(1 << bits));
-    u32 z = (u32)((f64)norm.z/(f64)(1 << bits));
-
-    u64 morton_code = 0;
-    for EachIndex(idx, bits) {
-        morton_code |= ((x >> idx) & 1) << (idx*3 + 0);
-        morton_code |= ((y >> idx) & 1) << (idx*3 + 1);
-        morton_code |= ((z >> idx) & 1) << (idx*3 + 2);
-    }
-
-    return morton_code;
+static LBVH_Tree* rt_cpu_entity_to_lbvh_or_null(RT_Entity* entity) {
+    return NULL; // @todo
 }
 
-static vec3_f32 rt_cpu_entity_to_c(RT_Entity* entity) {
-    switch (entity->type) {
-        case RT_EntityType_Sphere:{
-            return entity->sphere.center;
-        }break;
-    }
+internal void rt_cpu_build_blas(RT_CPU_BLAS* out_blas, Arena* arena, RT_World* world) {
+    RT_EntityList* list = &world->entities;
 
-    AssertAlways(false);
-    return (vec3_f32){};
+    out_blas->node_count = list->length;
+    out_blas->nodes = push_array_no_zero(arena, RT_CPU_BLASNode, out_blas->node_count);
+
+    u64 idx = 0;
+    for EachList(node, RT_EntityNode, list->first) {
+        RT_Entity* entity = &node->v;
+
+        out_blas->nodes[idx].entity = entity;
+        out_blas->nodes[idx].lbvh = rt_cpu_entity_to_lbvh_or_null(entity);
+        idx++;
+    }
 }
 
 static rng3_f32 rt_cpu_entity_to_aabb(RT_Entity* entity) {
@@ -82,42 +75,21 @@ static rng3_f32 rt_cpu_entity_to_aabb(RT_Entity* entity) {
     return (rng3_f32){};
 }
 
-internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, RT_World* world) {
-    RT_EntityList* list = &world->entities;
-    
+internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CPU_BLAS* in_blas) {
     {DeferResource(Temp scratch = scratch_begin(NULL, 0), scratch_end(scratch)) {
-        LBVH_MortonValue* lbvh_morton_codes = push_array_no_zero(scratch.arena, LBVH_MortonValue, list->length);
-    
-        // determine min and extents of entity centers
-        vec3_f32 min = make_scale_3f32(MIN_F32), max = make_scale_3f32(MAX_F32);
-        for EachList(node, RT_EntityNode, list->first) {
-            RT_Entity* entity = &node->v;
-    
-            vec3_f32 c = rt_cpu_entity_to_c(entity);
-            min = min_3f32(min, c);
-            max = max_3f32(max, c);
-        }
-        vec3_f32 extents = sub_3f32(max, min);
-    
-        // calculate morton codes
-        u64 idx = 0;
-        for EachList(node, RT_EntityNode, list->first) {
-            RT_Entity* entity = &node->v;
-    
-            vec3_f32 c = rt_cpu_entity_to_c(entity);
+        rng3_f32* lbvh_aabbs = push_array_no_zero(scratch.arena, rng3_f32, in_blas->node_count);
 
-            lbvh_morton_codes[idx].morton_code = rt_cpu_c_to_morton_code(c, min, extents);
-            lbvh_morton_codes[idx].aabb = rt_cpu_entity_to_aabb(entity);
-            lbvh_morton_codes[idx].value = (void*)entity;
-            idx++;
+        for (u64 idx = 0; idx < in_blas->node_count; idx++) {
+            const RT_CPU_BLASNode* node = &in_blas->nodes[idx];
+            lbvh_aabbs[idx] = rt_cpu_entity_to_aabb(node->entity);
         }
-    
-        // build lbvh
-        out_tlas->lbvh = lbvh_make(arena, lbvh_morton_codes, list->length);
-        #ifdef BUILD_DEBUG
-            lbvh_dump_to_file(out_tlas->lbvh, "out.bvh");
-        #endif
+
+        out_tlas->lbvh = lbvh_make(arena, lbvh_aabbs, in_blas->node_count);
     }}
+
+    #ifdef BUILD_DEBUG
+        lbvh_dump_to_file(&out_tlas->lbvh, "out.bvh");
+    #endif
 }
 
 // ============================================================================
@@ -285,13 +257,17 @@ internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, c
 // ============================================================================
 // intersection
 // ============================================================================
-struct RT_CPU_LBVHData {
+struct RT_CPU_BVHData {
     RT_CPU_HitRecord* hit_record;
     RT_CPU_Tracer* tracer;
 };
-static bool rt_cpu_lbvh_hit(void* value, const rng3_f32* in_ray, rng_f32* inout_t_interval, void* data) {
-    RT_Entity* entity = (RT_Entity*)value;
-    RT_CPU_LBVHData* rt_cpu_data = (RT_CPU_LBVHData*)data;
+static bool rt_cpu_bvh_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_interval, void* data) {
+    RT_CPU_BVHData* rt_cpu_data = (RT_CPU_BVHData*)data;
+    RT_CPU_BLAS* blas = &rt_cpu_data->tracer->blas;
+
+    Assert(id != 0 && id <= blas->node_count);
+    RT_CPU_BLASNode* blas_node = &blas->nodes[id-1];
+    RT_Entity* entity = blas_node->entity;
 
     bool hit = false;
     switch (entity->type) {
@@ -308,11 +284,11 @@ static bool rt_cpu_lbvh_hit(void* value, const rng3_f32* in_ray, rng_f32* inout_
 }
 
 internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
-    RT_CPU_LBVHData rt_cpu_data = {
+    RT_CPU_BVHData rt_cpu_bvh_data = {
         .hit_record = out_record,
         .tracer = tracer,
     };
-    return lbvh_query_ray(tracer->tlas.lbvh, in_ray, &interval, &rt_cpu_lbvh_hit, (void*)&rt_cpu_data);
+    return lbvh_query_ray(&tracer->tlas.lbvh, in_ray, &interval, &rt_cpu_bvh_hit, (void*)&rt_cpu_bvh_data);
 }
 
 internal bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {

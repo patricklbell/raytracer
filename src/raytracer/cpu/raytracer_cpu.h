@@ -11,17 +11,31 @@ struct RT_CPU_HitRecord {
 
 typedef struct RT_CPU_TLAS RT_CPU_TLAS;
 struct RT_CPU_TLAS {
+    LBVH_Tree lbvh;
+};
+
+typedef struct RT_CPU_BLASNode RT_CPU_BLASNode;
+struct RT_CPU_BLASNode {
     LBVH_Tree* lbvh;
+    RT_Entity* entity;
+};
+
+typedef struct RT_CPU_BLAS RT_CPU_BLAS;
+struct RT_CPU_BLAS {
+    RT_CPU_BLASNode* nodes;
+    u64 node_count;
 };
 
 typedef struct RT_CPU_Tracer RT_CPU_Tracer;
 struct RT_CPU_Tracer {
     Arena* arena;
-    RT_World* world;
     u8 max_bounces;
 
-    Arena* as_arena;
+    Arena* tlas_arena;
     RT_CPU_TLAS tlas;
+
+    Arena* blas_arena;
+    RT_CPU_BLAS blas;
 };
 
 typedef struct RT_CPU_TraceContext RT_CPU_TraceContext;
@@ -37,7 +51,8 @@ internal RT_Handle      rt_cpu_tracer_to_handle(RT_CPU_Tracer* tracer);
 // acceleration structures
 // ============================================================================
 
-internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, RT_World* world);
+internal void rt_cpu_build_blas(RT_CPU_BLAS* out_blas, Arena* arena, RT_World* world);
+internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CPU_BLAS* in_blas);
 
 // ============================================================================
 // cpu kernels
