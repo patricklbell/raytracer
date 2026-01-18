@@ -42,38 +42,17 @@ demo_hook void render(const DEMO_Settings* settings) {
         // add_dieletric_sphere(world, make_3f32(0,+1.6,0), 0.5, 1.52);
         add_lambertian_sphere(world, make_3f32(0,-101,0), 100.0, make_3f32(0.5,0.6,0.5));
 
-        RT_TracerSettings tracer_settings = {
-            .max_bounces=settings->bounces
-        };
-        {DeferResource(RT_Handle tracer = rt_make_tracer(tracer_settings), rt_tracer_cleanup(tracer)) {    
+        {DeferResource(RT_Handle tracer = rt_make_tracer(get_rt_tracer_settings(settings)), rt_tracer_cleanup(tracer)) {
             rt_tracer_load_world(tracer, world);
             {DeferResource(Temp scratch = scratch_begin(NULL, 0), scratch_end(scratch)) {
                 int width = settings->width, height = settings->height;
                 vec3_f32* buffer = push_array(scratch.arena, vec3_f32, width*height);
                 
-                f32 aspect_ratio = (f32)width/height;
-                f32 vfov = DegreesToRad(45);
-                f32 focus_distance = 2.5f;
-                f32 defocus_angle = DegreesToRad(5);
-
-                f32 h = tan_f32(vfov/2.f);
-                f32 focus_plane_height = 2*h*focus_distance;
-                f32 defocus_radius = focus_distance*tan_f32(defocus_angle/2.f);
-
-                rt_tracer_cast(
-                    tracer, 
-                    (RT_CastSettings){
-                        .eye=make_3f32(0,0,2.5),
-                        .up=make_3f32(0,1,0),
-                        .forward=make_3f32(0,0,-1),
-                        .viewport=make_3f32(focus_plane_height*aspect_ratio, focus_plane_height, focus_distance),
-                        .samples=settings->samples,
-                        .ior=1.f,
-                        .defocus=true,
-                        .defocus_disk=make_2f32(defocus_radius, defocus_radius),
-                    },
-                    buffer, width, height
+                RT_CastSettings csettings = get_rt_cast_settings(settings,
+                    make_3f32(0,0,-2.5), make_3f32(0,0,0),
+                    (DEMO_ExtraCastSettings){.defocus_angle=DegreesToRad(5)}
                 );
+                rt_tracer_cast(tracer, csettings, buffer, width, height);
 
                 stbi_write_hdr(settings->out.cstr, width, height, 3, &buffer[0].v[0]);
             }}}

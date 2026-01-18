@@ -59,6 +59,7 @@ call :print_info
 if not exist %build_dir% mkdir %build_dir%
 if "%all%"=="1"                 set didbuild=1 && call :build_all_demos || exit /b 1
 if "%spheres%"=="1"             set didbuild=1 && call :build_demo spheres || exit /b 1
+if "%tri%"=="1"                 set didbuild=1 && call :build_demo tri || exit /b 1
 
 if "%didbuild%"=="" (
   echo Error: No valid command specified
@@ -71,6 +72,7 @@ goto :eof
 :: Subroutines
 :build_all_demos
   call :build_demo spheres
+  call :build_demo tri
 exit /b 0
 
 :build_demo
@@ -124,6 +126,8 @@ echo   /trace            Enable Tracy profiling
 echo   /help             Show this help message
 echo.
 echo TARGETS:
+echo   all               Build all demos
 echo   spheres           Build spheres demo
+echo   tri               Build tri demo
 echo.
 exit /b 0

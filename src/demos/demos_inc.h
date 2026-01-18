@@ -24,3 +24,12 @@ struct DEMO_Settings {
 };
 
 demo_hook void render(const DEMO_Settings* settings);
+
+typedef struct DEMO_ExtraCastSettings DEMO_ExtraCastSettings;
+struct DEMO_ExtraCastSettings {
+    f32 defocus_angle;
+    bool orthographic;
+};
+
+RT_CastSettings get_rt_cast_settings(const DEMO_Settings* settings, vec3_f32 eye, vec3_f32 subject, DEMO_ExtraCastSettings extra);
+RT_TracerSettings get_rt_tracer_settings(const DEMO_Settings* settings);

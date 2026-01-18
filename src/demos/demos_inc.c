@@ -102,3 +102,37 @@ int main(int argc, char** argv) {
     render(&settings);
     return 0;
 }
+
+RT_CastSettings get_rt_cast_settings(const DEMO_Settings* settings, vec3_f32 eye, vec3_f32 subject, DEMO_ExtraCastSettings extra) {
+    vec3_f32 d = sub_3f32(subject, eye);
+    vec3_f32 up = make_3f32(0,1,0);
+    vec3_f32 forward = normalize_3f32(d);
+    vec3_f32 right = cross_3f32(forward, up);
+
+    f32 aspect_ratio = (f32)settings->width/settings->height;
+    f32 vfov = DegreesToRad(45);
+    f32 focus_distance = length_3f32(d);
+
+    f32 h = tan_f32(vfov/2.f);
+    f32 focus_plane_height = 2*h*focus_distance;
+    f32 defocus_radius = focus_distance*tan_f32(extra.defocus_angle/2.f);
+
+    return (RT_CastSettings){
+        .eye=eye,
+        .up=up,
+        .forward=forward,
+        .right=right,
+        .viewport=make_3f32(focus_plane_height*aspect_ratio, focus_plane_height, focus_distance),
+        .samples=settings->samples,
+        .ior=1.f,
+        .defocus=extra.defocus_angle > 0.f,
+        .defocus_disk=make_2f32(defocus_radius, defocus_radius),
+        .orthographic=extra.orthographic,
+    };
+}
+
+RT_TracerSettings get_rt_tracer_settings(const DEMO_Settings* settings) {
+    return (RT_TracerSettings){
+        .max_bounces=settings->bounces,
+    };
+}

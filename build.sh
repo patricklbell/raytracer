@@ -23,7 +23,9 @@ Options:
   --help          Display this help and exit
 
 Targets:
+  all             Build all demos
   spheres         Build spheres demo
+  tri             Build tri demo
 
 Environment variables:
   CC              C compiler to use (default: g++)
@@ -60,6 +62,7 @@ build_single_file() {
 
 build_all_demos() {
     build_single_file spheres
+    build_single_file tri
 }
 
 main() {
@@ -95,6 +98,7 @@ main() {
         case "$arg" in
             all)           build_all_demos;;
             spheres)       build_single_file spheres;;
+            tri)           build_single_file tri;;
             "")            echo "Error: No command specified"
                            echo "Try '$SCRIPT_NAME --help' for more information."
                            exit 1;;
