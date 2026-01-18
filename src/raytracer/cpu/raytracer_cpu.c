@@ -197,6 +197,11 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
     }
 
     RT_Material* mat = &((RT_MaterialNode*)in_record->material.v64[0])->v;
+
+    if (mat->billboard && dot_3f32(in_record->n, in_ray->direction) > 0.f) {
+        in_record->n = mul_3f32(in_record->n, -1.f);
+    }
+
     switch (mat->type) {
         case RT_MaterialType_Lambertian:{
             rng3_f32 r_ray = {
@@ -209,6 +214,8 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
             return elmul_3f32(radiance, mat->albedo);
         }break;
         case RT_MaterialType_Dieletric:{
+            Assert(!mat->billboard);
+
             vec3_f32 d_norm = normalize_3f32(in_ray->direction);
             f32 idotn = -dot_3f32(in_record->n, d_norm);
             bool backface = idotn < 0.f;
@@ -280,10 +287,6 @@ internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, c
 // ============================================================================
 // intersection
 // ============================================================================
-struct RT_CPU_BVHData {
-    RT_CPU_HitRecord* hit_record;
-    RT_CPU_Tracer* tracer;
-};
 static bool rt_cpu_bvh_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_interval, void* data) {
     RT_CPU_BVHData* rt_cpu_data = (RT_CPU_BVHData*)data;
     RT_CPU_BLAS* blas = &rt_cpu_data->tracer->blas;
@@ -291,18 +294,69 @@ static bool rt_cpu_bvh_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_inte
     Assert(id > 0 && id <= blas->node_count);
     RT_CPU_BLASNode* blas_node = &blas->nodes[id-1];
 
-    return rt_cpu_intersect_blas_node(blas_node, in_ray, inout_t_interval, rt_cpu_data->hit_record);
+    return rt_cpu_intersect_blas_node(blas_node, in_ray, inout_t_interval, &rt_cpu_data->bvh_hit_record);
 }
 
 internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
     RT_CPU_BVHData rt_cpu_bvh_data = {
-        .hit_record = out_record,
+        .bvh_hit_record = {},
         .tracer = tracer,
     };
-    return lbvh_query_ray(&tracer->tlas.lbvh, in_ray, &interval, &rt_cpu_bvh_hit, (void*)&rt_cpu_bvh_data);
+    bool hit = lbvh_query_ray(&tracer->tlas.lbvh, in_ray, &interval, &rt_cpu_bvh_hit, (void*)&rt_cpu_bvh_data);
+
+    // convert bvh hit record into hit record for shading
+    // (avoids costly calculations if multiple intersections occur)
+    if (hit) {
+        RT_CPU_BVHHitRecord* bvh_hit_record = &rt_cpu_bvh_data.bvh_hit_record;
+        const RT_CPU_BLASNode* blas_node = bvh_hit_record->blas_node;
+        const RT_Entity* entity = blas_node->entity;
+
+        out_record->t = interval.max;
+        out_record->p = add_3f32(in_ray->origin, mul_3f32(in_ray->direction, out_record->t));
+        out_record->material = entity->material;
+        
+        // @todo flag on material showing which attributes are necessary for shading?
+        switch (entity->type) {
+            case RT_EntityType_Sphere:{
+                const RT_Sphere* sphere = &entity->sphere;
+
+                out_record->n = mul_3f32(sub_3f32(out_record->p, sphere->center), 1.f/sphere->radius);
+            }break;
+            case RT_EntityType_Mesh:{
+                const RT_Mesh* mesh = &entity->mesh;
+
+                Assert(mesh->primitive == GEO_Primitive_TRI_LIST); // @todo
+
+                if (!(mesh->attrs & GEO_VertexAttributes_N)) {
+                    vec3_f32* p_start = OffsetPtr(mesh->vertices, geo_vertex_offset(mesh->attrs, GEO_VertexAttributes_P), GEO_VertexType_P);
+                    u64 p_stride = geo_vertex_stride(mesh->attrs, GEO_VertexAttributes_P);
+    
+                    vec3_f32 v0,v1,v2;
+                    u32 idx = bvh_hit_record->tri_idx;
+                    bool auto_index = mesh->indices_count == 0;
+                    if (auto_index) {
+                        v0 = *OffsetPtr(p_start, (idx+0)*p_stride, GEO_VertexType_P);
+                        v1 = *OffsetPtr(p_start, (idx+1)*p_stride, GEO_VertexType_P);
+                        v2 = *OffsetPtr(p_start, (idx+2)*p_stride, GEO_VertexType_P);
+                    } else {
+                        v0 = *OffsetPtr(p_start, (mesh->indices[idx+0])*p_stride, GEO_VertexType_P);
+                        v1 = *OffsetPtr(p_start, (mesh->indices[idx+1])*p_stride, GEO_VertexType_P);
+                        v2 = *OffsetPtr(p_start, (mesh->indices[idx+2])*p_stride, GEO_VertexType_P);
+                    }
+    
+                    Assert(tracer->winding_order == GEO_WindingOrder_CCW);
+                    out_record->n = normalize_3f32(cross_3f32(sub_3f32(v1, v0), sub_3f32(v2, v0)));
+                } else {
+                    NotImplemented;
+                }
+            }
+        }
+    }
+
+    return hit;
 }
 
-internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const rng3_f32* in_ray, rng_f32* inout_t_interval, RT_CPU_HitRecord* out_record) {
+internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const rng3_f32* in_ray, rng_f32* inout_t_interval, RT_CPU_BVHHitRecord* out_record) {
     RT_Entity* entity = blas_node->entity;
 
     bool hit = false;
@@ -310,11 +364,6 @@ internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const
         case RT_EntityType_Sphere:{
             const RT_Sphere* sphere = &entity->sphere;
             hit = geo_intersect_sphere(in_ray, sphere->center, sphere->radius, inout_t_interval);
-            if (hit) {
-                out_record->t = inout_t_interval->max;
-                out_record->p = add_3f32(in_ray->origin, mul_3f32(in_ray->direction, out_record->t));
-                out_record->n = mul_3f32(sub_3f32(out_record->p, sphere->center), 1.f/sphere->radius);
-            }
         }break;
         case RT_EntityType_Mesh:{
             const RT_Mesh* mesh = &entity->mesh;
@@ -331,7 +380,10 @@ internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const
                     vec3_f32 v1 = *OffsetPtr(p_start, (idx+1)*p_stride, GEO_VertexType_P);
                     vec3_f32 v2 = *OffsetPtr(p_start, (idx+2)*p_stride, GEO_VertexType_P);
     
-                    hit |= geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval);
+                    if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval)) {
+                        hit = true;
+                        out_record->tri_idx = idx;
+                    }
                 }
             } else {
                 for (u32 idx = 0; idx < mesh->indices_count; idx+=3) {
@@ -339,15 +391,19 @@ internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const
                     vec3_f32 v1 = *OffsetPtr(p_start, (mesh->indices[idx+1])*p_stride, GEO_VertexType_P);
                     vec3_f32 v2 = *OffsetPtr(p_start, (mesh->indices[idx+2])*p_stride, GEO_VertexType_P);
     
-                    hit |= geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval);
+                    if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval)) {
+                        hit = true;
+                        out_record->tri_idx = idx;
+                    }
                 }
             }
         }
     }
-    
+
     if (hit) {
-        out_record->material = entity->material;
+        out_record->blas_node = blas_node;
     }
+    
     return hit;
 }
 

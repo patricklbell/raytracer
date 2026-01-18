@@ -30,6 +30,7 @@ typedef struct RT_CPU_Tracer RT_CPU_Tracer;
 struct RT_CPU_Tracer {
     Arena* arena;
     u8 max_bounces;
+    GEO_WindingOrder winding_order;
 
     Arena* tlas_arena;
     RT_CPU_TLAS tlas;
@@ -50,7 +51,6 @@ internal RT_Handle      rt_cpu_tracer_to_handle(RT_CPU_Tracer* tracer);
 // ============================================================================
 // acceleration structures
 // ============================================================================
-
 internal void rt_cpu_build_blas(RT_CPU_BLAS* out_blas, Arena* arena, RT_World* world);
 internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CPU_BLAS* in_blas);
 
@@ -65,8 +65,20 @@ internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, c
 // ============================================================================
 // intersection
 // ============================================================================
+typedef struct RT_CPU_BVHHitRecord RT_CPU_BVHHitRecord;
+struct RT_CPU_BVHHitRecord {
+    const RT_CPU_BLASNode* blas_node;
+    u32 tri_idx;
+};
+
+typedef struct RT_CPU_BVHData RT_CPU_BVHData;
+struct RT_CPU_BVHData {
+    RT_CPU_BVHHitRecord bvh_hit_record;
+    RT_CPU_Tracer* tracer;
+};
+
 internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record);
-internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const rng3_f32* in_ray, rng_f32* inout_t_interval, RT_CPU_HitRecord* out_record);
+internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const rng3_f32* in_ray, rng_f32* inout_t_interval, RT_CPU_BVHHitRecord* out_record);
 
 // ============================================================================
 // helpers

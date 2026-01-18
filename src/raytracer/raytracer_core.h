@@ -12,7 +12,6 @@ bool rt_is_zero_handle(RT_Handle handle);
 // ============================================================================
 // world
 // ============================================================================
-
 typedef enum RT_MaterialType {
     RT_MaterialType_Lambertian,
     RT_MaterialType_Dieletric,
@@ -27,6 +26,9 @@ struct RT_Material {
     vec3_f32 albedo;
     f32 roughness;
     f32 ior;
+
+    // makes normal always point towards ray and is incompatible with dieletrics
+    bool billboard;
 };
 
 typedef struct RT_MaterialNode RT_MaterialNode;
@@ -115,6 +117,7 @@ void          rt_world_remove_material(RT_World* world, RT_Handle handle);
 // ============================================================================
 struct RT_TracerSettings {
     u8 max_bounces;
+    GEO_WindingOrder winding_order;
 };
 
 #define RT_MAX_MAX_BOUNCES 64

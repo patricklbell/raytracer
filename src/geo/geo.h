@@ -32,7 +32,6 @@ internal force_inline u64 geo_vertex_offset(GEO_VertexAttributes attrs, GEO_Vert
 internal force_inline u64 geo_vertex_stride(GEO_VertexAttributes attrs, GEO_VertexAttributes attr);
 internal force_inline u64 geo_vertex_i_offset(GEO_VertexAttributes attrs, GEO_VertexAttributes attr, u64 i);
 
-// primitives
 typedef enum GEO_Primitive {
     GEO_Primitive_ZERO = 0,
     GEO_Primitive_POINT_LIST,
@@ -43,6 +42,11 @@ typedef enum GEO_Primitive {
     GEO_Primitive_RECT_LIST,
     GEO_Primitive_COUNT ENUM_CASE_UNUSED,
 } GEO_Primitive;
+
+typedef enum GEO_WindingOrder {
+    GEO_WindingOrder_CCW = 0,
+    GEO_WindingOrder_CW,
+} GEO_WindingOrder;
 
 // intersection
 internal rng_f32 geo_make_pos_interval();

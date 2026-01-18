@@ -2,11 +2,10 @@
 #include "demos/demos_inc.c"
 
 demo_hook void render(const DEMO_Settings* settings) {
-    // @note winding order should not matter
     const vec4_f32 tri_vertices[] = {
         {-0.5f, -sqrt_f32(3.f)/4.f, 0.f},
         {+0.5f, -sqrt_f32(3.f)/4.f, 0.f},
-        {+0.0f, +sqrt_f32(3.f)/4.f, 0.f}
+        {+0.0f, +sqrt_f32(3.f)/4.f, 0.f},
     };
     // @note check geo packing matches array
     Assert(geo_vertex_stride(GEO_VertexAttributes_P, GEO_VertexAttributes_P) == sizeof(tri_vertices[0]));
@@ -14,8 +13,9 @@ demo_hook void render(const DEMO_Settings* settings) {
     {DeferResource(RT_World* world = rt_make_world((RT_WorldSettings){}), rt_world_cleanup(world)) {
         RT_Handle material = rt_world_add_material(world);
         RT_Material* material_ptr = rt_world_resolve_material(world, material);
-        material_ptr->type = RT_MaterialType_Lambertian;
+        material_ptr->type = RT_MaterialType_Normal;
         material_ptr->albedo = make_scale_3f32(0.5f);
+        material_ptr->billboard = true;
 
         RT_Handle entity = rt_world_add_entity(world);
         RT_Entity* entity_ptr = rt_world_resolve_entity(world, entity);
@@ -34,7 +34,7 @@ demo_hook void render(const DEMO_Settings* settings) {
                 vec3_f32* buffer = push_array(scratch.arena, vec3_f32, width*height);
                 
                 RT_CastSettings csettings = get_rt_cast_settings(settings,
-                    make_3f32(0,0,-1), make_3f32(0,0,0),
+                    make_3f32(0,0,1), make_3f32(0,0,0),
                     (DEMO_ExtraCastSettings){.orthographic=true}
                 );
                 rt_tracer_cast(tracer, csettings, buffer, width, height);
