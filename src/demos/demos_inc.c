@@ -110,7 +110,7 @@ RT_CastSettings get_rt_cast_settings(const DEMO_Settings* settings, vec3_f32 eye
     vec3_f32 right = cross_3f32(forward, up);
 
     f32 aspect_ratio = (f32)settings->width/settings->height;
-    f32 vfov = DegreesToRad(45);
+    f32 vfov = (extra.vfov > 0.f) ? extra.vfov : DegreesToRad(45);
     f32 focus_distance = length_3f32(d);
 
     f32 h = tan_f32(vfov/2.f);
@@ -131,8 +131,9 @@ RT_CastSettings get_rt_cast_settings(const DEMO_Settings* settings, vec3_f32 eye
     };
 }
 
-RT_TracerSettings get_rt_tracer_settings(const DEMO_Settings* settings) {
+RT_TracerSettings get_rt_tracer_settings(const DEMO_Settings* settings, DEMO_ExtraTracerSettings extra) {
     return (RT_TracerSettings){
         .max_bounces=settings->bounces,
+        .sky=!extra.no_sky,
     };
 }

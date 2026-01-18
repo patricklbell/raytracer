@@ -6,12 +6,12 @@ static RT_Material* add_sphere(RT_World* world, vec3_f32 center, f32 radius) {
     RT_Handle material = rt_world_add_material(world);
     RT_Material* material_ptr = rt_world_resolve_material(world, material);
 
-    RT_Handle entity = rt_world_add_entity(world);
-    RT_Entity* entity_ptr = rt_world_resolve_entity(world, entity);
-    entity_ptr->type = RT_EntityType_Sphere;
-    entity_ptr->material = material;
-    entity_ptr->sphere.center = center;
-    entity_ptr->sphere.radius = radius;
+    RT_Handle instance = rt_world_add_instance(world);
+    RT_Instance* instance_ptr = rt_world_resolve_instance(world, instance);
+    instance_ptr->type = RT_InstanceType_Sphere;
+    instance_ptr->material = material;
+    instance_ptr->sphere.center = center;
+    instance_ptr->sphere.radius = radius;
 
     return material_ptr;
 }
@@ -34,16 +34,20 @@ static void add_dieletric_sphere(RT_World* world, vec3_f32 center, f32 radius, f
 
 demo_hook void render(const DEMO_Settings* settings) {
     {DeferResource(RT_World* world = rt_make_world((RT_WorldSettings){}), rt_world_cleanup(world)) {
-        add_dieletric_sphere(world, make_3f32(0,0,0), 1.0, 1.52);
-        // add_dieletric_sphere(world, make_3f32(0,0,0), 0.8, 1.0);
-        add_lambertian_sphere(world, make_3f32(0,0,0), 0.8, make_3f32(0.8,0.5,0.5));
-        add_metal_sphere(world, make_3f32(-1.6,0,0), 0.5, 0.1);
-        add_metal_sphere(world, make_3f32(+1.6,0,0), 0.5, 0.9);
-        // add_dieletric_sphere(world, make_3f32(0,+1.6,0), 0.5, 1.52);
-        add_lambertian_sphere(world, make_3f32(0,-101,0), 100.0, make_3f32(0.5,0.6,0.5));
+        RT_TracerSettings tsettings = get_rt_tracer_settings(settings, (DEMO_ExtraTracerSettings){});
+        {DeferResource(RT_Handle tracer = rt_make_tracer(tsettings), rt_tracer_cleanup(tracer)) {
+            rt_tracer_build_blas(tracer, world);
 
-        {DeferResource(RT_Handle tracer = rt_make_tracer(get_rt_tracer_settings(settings)), rt_tracer_cleanup(tracer)) {
-            rt_tracer_load_world(tracer, world);
+            add_dieletric_sphere(world, make_3f32(0,0,0), 1.0, 1.52);
+            // add_dieletric_sphere(world, make_3f32(0,0,0), 0.8, 1.0);
+            add_lambertian_sphere(world, make_3f32(0,0,0), 0.8, make_3f32(0.8,0.5,0.5));
+            add_metal_sphere(world, make_3f32(-1.6,0,0), 0.5, 0.1);
+            add_metal_sphere(world, make_3f32(+1.6,0,0), 0.5, 0.9);
+            // add_dieletric_sphere(world, make_3f32(0,+1.6,0), 0.5, 1.52);
+            add_lambertian_sphere(world, make_3f32(0,-101,0), 100.0, make_3f32(0.5,0.6,0.5));
+
+            rt_tracer_build_tlas(tracer, world);
+
             {DeferResource(Temp scratch = scratch_begin(NULL, 0), scratch_end(scratch)) {
                 int width = settings->width, height = settings->height;
                 vec3_f32* buffer = push_array(scratch.arena, vec3_f32, width*height);

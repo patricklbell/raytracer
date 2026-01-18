@@ -29,7 +29,15 @@ typedef struct DEMO_ExtraCastSettings DEMO_ExtraCastSettings;
 struct DEMO_ExtraCastSettings {
     f32 defocus_angle;
     bool orthographic;
+    f32 vfov;
 };
 
 RT_CastSettings get_rt_cast_settings(const DEMO_Settings* settings, vec3_f32 eye, vec3_f32 subject, DEMO_ExtraCastSettings extra);
-RT_TracerSettings get_rt_tracer_settings(const DEMO_Settings* settings);
+
+
+typedef struct DEMO_ExtraTracerSettings DEMO_ExtraTracerSettings;
+struct DEMO_ExtraTracerSettings {
+    bool no_sky;
+};
+
+RT_TracerSettings get_rt_tracer_settings(const DEMO_Settings* settings, DEMO_ExtraTracerSettings extra);

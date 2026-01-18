@@ -60,9 +60,10 @@ if not exist %build_dir% mkdir %build_dir%
 if "%all%"=="1"                 set didbuild=1 && call :build_all_demos || exit /b 1
 if "%spheres%"=="1"             set didbuild=1 && call :build_demo spheres || exit /b 1
 if "%tri%"=="1"                 set didbuild=1 && call :build_demo tri || exit /b 1
+if "%cornell%"=="1"             set didbuild=1 && call :build_demo cornell || exit /b 1
 
 if "%didbuild%"=="" (
-  echo Error: No valid command specified
+  echo Error: No valid target specified
   echo Try '%script_name% /help' for more information.
   exit /b 1
 )
@@ -73,6 +74,7 @@ goto :eof
 :build_all_demos
   call :build_demo spheres
   call :build_demo tri
+  call :build_demo cornell
 exit /b 0
 
 :build_demo
@@ -129,5 +131,6 @@ echo TARGETS:
 echo   all               Build all demos
 echo   spheres           Build spheres demo
 echo   tri               Build tri demo
+echo   cornell           Build Cornell box demo
 echo.
 exit /b 0

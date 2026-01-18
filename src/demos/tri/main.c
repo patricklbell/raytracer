@@ -11,23 +11,39 @@ demo_hook void render(const DEMO_Settings* settings) {
     Assert(geo_vertex_stride(GEO_VertexAttributes_P, GEO_VertexAttributes_P) == sizeof(tri_vertices[0]));
 
     {DeferResource(RT_World* world = rt_make_world((RT_WorldSettings){}), rt_world_cleanup(world)) {
-        RT_Handle material = rt_world_add_material(world);
-        RT_Material* material_ptr = rt_world_resolve_material(world, material);
-        material_ptr->type = RT_MaterialType_Normal;
-        material_ptr->albedo = make_scale_3f32(0.5f);
-        material_ptr->billboard = true;
+        RT_TracerSettings tsettings = get_rt_tracer_settings(settings, (DEMO_ExtraTracerSettings){});
+        {DeferResource(RT_Handle tracer = rt_make_tracer(tsettings), rt_tracer_cleanup(tracer)) {
+            RT_Handle tri;
+            {
+                tri = rt_world_add_mesh(world);
+                RT_Mesh* tri_ptr = rt_world_resolve_mesh(world, tri);
+                tri_ptr->vertices = tri_vertices;
+                tri_ptr->vertices_count = ArrayLength(tri_vertices);
+                tri_ptr->primitive = GEO_Primitive_TRI_LIST;
+                tri_ptr->attrs = GEO_VertexAttributes_P;
+                
+                rt_tracer_build_blas(tracer, world);
+            }
 
-        RT_Handle entity = rt_world_add_entity(world);
-        RT_Entity* entity_ptr = rt_world_resolve_entity(world, entity);
-        entity_ptr->type = RT_EntityType_Mesh;
-        entity_ptr->material = material;
-        entity_ptr->mesh.vertices = tri_vertices;
-        entity_ptr->mesh.vertices_count = ArrayLength(tri_vertices);
-        entity_ptr->mesh.primitive = GEO_Primitive_TRI_LIST;
-        entity_ptr->mesh.attrs = GEO_VertexAttributes_P;
 
-        {DeferResource(RT_Handle tracer = rt_make_tracer(get_rt_tracer_settings(settings)), rt_tracer_cleanup(tracer)) {
-            rt_tracer_load_world(tracer, world);
+            {
+                RT_Handle white_billboard = rt_world_add_material(world);
+                RT_Material* white_billboard_ptr = rt_world_resolve_material(world, white_billboard);
+                white_billboard_ptr->type = RT_MaterialType_Lambertian;
+                white_billboard_ptr->albedo = make_scale_3f32(0.5f);
+                white_billboard_ptr->billboard = true;
+
+                RT_Handle instance = rt_world_add_instance(world);
+                RT_Instance* instance_ptr = rt_world_resolve_instance(world, instance);
+                instance_ptr->type = RT_InstanceType_Mesh;
+                instance_ptr->material = white_billboard;
+                instance_ptr->mesh.handle = tri;
+                instance_ptr->mesh.translation = zero_struct;
+                instance_ptr->mesh.rotation = make_identity_quat();
+                instance_ptr->mesh.scale = make_scale_3f32(1.f);
+
+                rt_tracer_build_tlas(tracer, world);
+            }
 
             {DeferResource(Temp scratch = scratch_begin(NULL, 0), scratch_end(scratch)) {
                 int width = settings->width, height = settings->height;

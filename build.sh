@@ -26,6 +26,7 @@ Targets:
   all             Build all demos
   spheres         Build spheres demo
   tri             Build tri demo
+  cornell         Build Cornell box demo
 
 Environment variables:
   CC              C compiler to use (default: g++)
@@ -63,6 +64,7 @@ build_single_file() {
 build_all_demos() {
     build_single_file spheres
     build_single_file tri
+    build_single_file cornell
 }
 
 main() {
@@ -99,10 +101,11 @@ main() {
             all)           build_all_demos;;
             spheres)       build_single_file spheres;;
             tri)           build_single_file tri;;
+            cornell)       build_single_file cornell;;
             "")            echo "Error: No command specified"
                            echo "Try '$SCRIPT_NAME --help' for more information."
                            exit 1;;
-            *)             echo "Error: Unknown command '$arg'"
+            *)             echo "Error: Unknown target '$arg'"
                            echo "Try '$SCRIPT_NAME --help' for more information."
                            exit 1;;
         esac

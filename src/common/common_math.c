@@ -34,6 +34,16 @@ internal vec3_f32 min_3f32(vec3_f32 a, vec3_f32 b)              { return (vec3_f
 internal vec3_f32 addscl_3f32(vec3_f32 a, f32 b)                { return (vec3_f32) {.x = a.x + b,.y = a.y + b,.z = a.z + b}; }
 internal vec3_f32 abs_3f32(vec3_f32 x)                          { return (vec3_f32) {.x = abs_f32(x.x),.y = abs_f32(x.y),.z = abs_f32(x.z)}; }
 internal vec3_f32 rand_unit_cube_3f32()                         { return (vec3_f32) {.x = rand_unit_f32(),.y = rand_unit_f32(),.z = rand_unit_f32()}; }
+internal vec3_f32 orthogonal_3f32(vec3_f32 x) {
+    vec3_f32 a = abs_3f32(x);
+
+    f32 mx = (a.x <= a.y) & (a.x <= a.z);
+    f32 my = (a.y <  a.x) & (a.y <= a.z);
+    f32 mz = 1.f - mx - my;
+
+    vec3_f32 o = make_3f32(mx, my, mz);
+    return cross_3f32(x, o);
+}
 internal vec3_f32 refract_3f32(vec3_f32 i, vec3_f32 n, f32 eta) {
     f32 ndoti = dot_3f32(n, i);
     f32 k = 1.f - eta*eta*(1.f - ndoti*ndoti);
@@ -57,12 +67,23 @@ internal vec3_b leq_3f32_f32(vec3_f32 x, f32 y) { return (vec3_b) {.x = x.x <= y
 internal bool   all_3b(vec3_b x)                { return x.x && x.y && x.z; }
 internal bool   any_3b(vec3_b x)                { return x.x || x.y || x.z; }
 
-internal vec4_f32 make_angle_axis_quat(f64 t, vec3_f32 a)    { f32 st = (f32)sin_f64(t/2.), ct = (f32)cos_f64(t/2.); return (vec4_f32) {.x = st*a.x,.y = st*a.y,.z = st*a.z,.w = ct};}
-internal vec4_f32 make_axis_quat(vec3_f32 a)                 { return (vec4_f32) {.x = a.x,.y = a.y,.z = a.z,.w = 0.f};}
-internal vec4_f32 make_identity_quat()                       { return (vec4_f32) {.x = 0.f,.y = 0.f,.z = 0.f,.w = 1.f};}
-internal vec4_f32 inv_quat(vec4_f32 q)                       { return (vec4_f32) {.x =-q.x,.y =-q.y,.z =-q.z,.w = q.w};}
-internal vec3_f32 rot_quat(vec3_f32 p, vec4_f32 q)           { return add_3f32(add_3f32(mul_3f32(p, q.w*q.w - dot_3f32(q.xyz, q.xyz)), mul_3f32(q.xyz, 2.f*dot_3f32(q.xyz, p))), mul_3f32(cross_3f32(q.xyz, p), 2.f*q.w));}
-internal vec4_f32 mul_quat(vec4_f32 q1, vec4_f32 q2)         {
+internal vec4_f32 make_angle_axis_quat(f64 t, vec3_f32 a)                     { return make_cos_axis_quat((f32)cos_f64(t/2.), a); }
+internal vec4_f32 make_cos_axis_quat(f32 ct, vec3_f32 a)                      { f32 st = sqrt_f32(1 - ct*ct); return (vec4_f32) {.x = st*a.x,.y = st*a.y,.z = st*a.z,.w = ct}; }
+internal vec4_f32 make_axis_quat(vec3_f32 a)                                  { return (vec4_f32) {.x = a.x,.y = a.y,.z = a.z,.w = 0.f}; }
+internal vec4_f32 make_identity_quat()                                        { return (vec4_f32) {.x = 0.f,.y = 0.f,.z = 0.f,.w = 1.f}; }
+internal vec4_f32 make_a_to_b_quat_not_antiparallel(vec3_f32 a, vec3_f32 b)   { return normalize_4f32((vec4_f32) {.xyz = cross_3f32(a,b), ._w = sqrt_f32(length2_3f32(a) + length2_3f32(b)) + dot_3f32(a,b)}); }
+internal vec4_f32 inv_quat(vec4_f32 q)                                        { return (vec4_f32) {.x =-q.x,.y =-q.y,.z =-q.z,.w = q.w}; }
+internal vec3_f32 rot_quat(vec3_f32 p, vec4_f32 q)                            { return add_3f32(add_3f32(mul_3f32(p, q.w*q.w - dot_3f32(q.xyz, q.xyz)), mul_3f32(q.xyz, 2.f*dot_3f32(q.xyz, p))), mul_3f32(cross_3f32(q.xyz, p), 2.f*q.w)); }
+internal vec4_f32 make_a_to_b_quat(vec3_f32 a, vec3_f32 b) {
+    float k = sqrt_f32(length2_3f32(a)*length2_3f32(b));
+    float k_cos_theta = dot_3f32(a, b);
+
+    if (k_cos_theta/k < -1.f + EPSILON_F32) {
+        return (vec4_f32){.xyz = normalize_3f32(orthogonal_3f32(a)), ._w = 0.f};
+    }
+    return normalize_4f32((vec4_f32){.xyz = cross_3f32(a,b), ._w = k_cos_theta + k});
+}
+internal vec4_f32 mul_quat(vec4_f32 q1, vec4_f32 q2) {
     return (vec4_f32) {
         .x = q1.x*q2.w + q1.w*q2.x + q1.y*q2.z - q1.z*q2.y,
         .y = q1.y*q2.w + q1.w*q2.y + q1.z*q2.x - q1.x*q2.z,
@@ -364,9 +385,10 @@ internal mat4x4_f32 transpose_4x4f32(mat4x4_f32 m) {
     }};
 }
 
-internal rng_f32  make_rng_f32(f32 a, f32 b)             { return (rng_f32 ){.a=a,.b=b}; }
+internal rng_f32  make_rng_f32(f32 a, f32 b)             { return (rng_f32){.a=a,.b=b}; }
 internal bool     in_rng_f32(rng_f32 x, f32 q)           { return q >= x.min && q <= x.max; }
-internal rng_f32  merge_rng_f32(rng_f32 x, rng_f32 y)    { return (rng_f32 ){.min=Min(x.min, y.min),.max=Max(x.max, y.max)}; }
+internal rng_f32  merge_rng_f32(rng_f32 x, rng_f32 y)    { return (rng_f32){.min=Min(x.min, y.min),.max=Max(x.max, y.max)}; }
+internal rng_f32  mul_rng_f32(rng_f32 x, f32 y)          { return (rng_f32){.a=x.a*y,.b=x.b*y}; }
 
 internal rng2_f32 make_rng2_f32(vec2_f32 a, vec2_f32 b)  { return (rng2_f32){.a=a,.b=b}; }
 

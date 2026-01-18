@@ -16,20 +16,20 @@ void rt_world_cleanup(RT_World* world) {
     arena_release(world->arena);
 }
 
-RT_Handle rt_world_add_entity(RT_World* world) {
-    RT_EntityNode* node = push_array(world->arena, RT_EntityNode, 1);
-    dllist_push_front(world->entities.first, world->entities.last, node);
-    world->entities.length++;
+RT_Handle rt_world_add_instance(RT_World* world) {
+    RT_InstanceNode* node = push_array(world->arena, RT_InstanceNode, 1);
+    dllist_push_front(world->instances.first, world->instances.last, node);
+    world->instances.length++;
     return (RT_Handle){.v64 = {(u64)node}};
 }
-RT_Entity* rt_world_resolve_entity(RT_World* world, RT_Handle handle) {
-    RT_EntityNode* node = (RT_EntityNode*)handle.v64[0];
+RT_Instance* rt_world_resolve_instance(RT_World* world, RT_Handle handle) {
+    RT_InstanceNode* node = (RT_InstanceNode*)handle.v64[0];
     return &node->v;
 }
-void rt_world_remove_entity(RT_World* world, RT_Handle handle) {
+void rt_world_remove_instance(RT_World* world, RT_Handle handle) {
     // @todo reclaim memory
-    RT_EntityNode* node = (RT_EntityNode*)handle.v64[0];
-    dllist_remove(world->entities.first, world->entities.last, node);
+    RT_InstanceNode* node = (RT_InstanceNode*)handle.v64[0];
+    dllist_remove(world->instances.first, world->instances.last, node);
 }
 
 RT_Handle rt_world_add_material(RT_World* world) {
@@ -46,4 +46,20 @@ void rt_world_remove_material(RT_World* world, RT_Handle handle) {
     // @todo reclaim memory
     RT_MaterialNode* node = (RT_MaterialNode*)handle.v64[0];
     dllist_remove(world->materials.first, world->materials.last, node);
+}
+
+RT_Handle rt_world_add_mesh(RT_World* world) {
+    RT_MeshNode* node = push_array(world->arena, RT_MeshNode, 1);
+    dllist_push_front(world->meshes.first, world->meshes.last, node);
+    world->meshes.length++;
+    return (RT_Handle){.v64 = {(u64)node}};
+}
+RT_Mesh* rt_world_resolve_mesh(RT_World* world, RT_Handle handle) {
+    RT_MeshNode* node = (RT_MeshNode*)handle.v64[0];
+    return &node->v;
+}
+void rt_world_remove_mesh(RT_World* world, RT_Handle handle) {
+    // @todo reclaim memory
+    RT_MeshNode* node = (RT_MeshNode*)handle.v64[0];
+    dllist_remove(world->meshes.first, world->meshes.last, node);
 }

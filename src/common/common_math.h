@@ -71,6 +71,7 @@ internal vec3_f32 max_3f32(vec3_f32 a, vec3_f32 b);
 internal vec3_f32 min_3f32(vec3_f32 a, vec3_f32 b);
 internal vec3_f32 addscl_3f32(vec3_f32 a, f32 b);
 internal vec3_f32 abs_3f32(vec3_f32 x);
+internal vec3_f32 orthogonal_3f32(vec3_f32 x);
 internal vec3_f32 rand_unit_cube_3f32();
 internal vec3_f32 rand_unit_sphere_3f32();
 internal vec3_f32 rand_unit_hemisphere_3f32(vec3_f32 n);
@@ -122,8 +123,11 @@ union vec4_f32 {
 };
 
 internal vec4_f32 make_angle_axis_quat(f64 t, vec3_f32 a);
+internal vec4_f32 make_cos_axis_quat(f32 ct, vec3_f32 a);
 internal vec4_f32 make_axis_quat(vec3_f32 a);
 internal vec4_f32 make_identity_quat();
+internal vec4_f32 make_a_to_b_quat(vec3_f32 a, vec3_f32 b);
+internal vec4_f32 make_a_to_b_quat_not_antiparallel(vec3_f32 a, vec3_f32 b);
 internal vec4_f32 inv_quat(vec4_f32 q);
 internal vec3_f32 rot_quat(vec3_f32 a, vec4_f32 q);
 internal vec4_f32 mul_quat(vec4_f32 q1, vec4_f32 q2);
@@ -208,6 +212,7 @@ union rng_f32 {
 internal rng_f32 make_rng_f32(f32 a, f32 b);
 internal bool    in_rng_f32(rng_f32 x, f32 q);
 internal rng_f32 merge_rng_f32(rng_f32 x, rng_f32 y);
+internal rng_f32 mul_rng_f32(rng_f32 x, f32 y);
 
 
 typedef union rng2_f32 rng2_f32;

@@ -120,7 +120,7 @@ static bool lbvh_aabb_query_ray(rng3_f32 aabb, const rng3_f32* in_ray, rng_f32* 
     return true;
 }
 
-static u64 lbvh_node_query_ray(LBVH_Node* node, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
+static u64 lbvh_node_query_ray(const LBVH_Node* node, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
     if (!lbvh_aabb_query_ray(node->aabb, in_ray, inout_t_interval))
         return 0;
     if (node->id > 0 && hit_function(node->id, in_ray, inout_t_interval, data))
@@ -132,6 +132,6 @@ static u64 lbvh_node_query_ray(LBVH_Node* node, const rng3_f32* in_ray, rng_f32*
     return (right_id > 0) ? right_id : left_id;
 }
 
-internal u64 lbvh_query_ray(LBVH_Tree* lbvh, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
+internal u64 lbvh_query_ray(const LBVH_Tree* lbvh, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
     return lbvh_node_query_ray(lbvh->root, in_ray, inout_t_interval, hit_function, data);
 }
