@@ -35,7 +35,7 @@ static u64 lbvh_get_split_idx(const u64* in_morton_codes, u64 count) {
 static LBVH_Node* lbvh_create_subtree(Arena* arena, const u64* in_morton_codes, const rng3_f32* in_aabbs, u64 start, u64 count) {
     LBVH_Node* node = push_array(arena, LBVH_Node, 1);
     
-    Assert(count != 0);
+    Assert(count > 0);
     if (count == 1) {
         node->id = start + 1;
         node->aabb = in_aabbs[start];
@@ -113,7 +113,7 @@ static bool lbvh_aabb_query_ray(rng3_f32 aabb, const rng3_f32* in_ray, rng_f32* 
             if (t0 < overlap.max) overlap.max = t0;
         }
 
-        if (overlap.max <= overlap.min)
+        if (overlap.max < overlap.min)
             return false;
     }
 
@@ -123,13 +123,13 @@ static bool lbvh_aabb_query_ray(rng3_f32 aabb, const rng3_f32* in_ray, rng_f32* 
 static u64 lbvh_node_query_ray(LBVH_Node* node, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
     if (!lbvh_aabb_query_ray(node->aabb, in_ray, inout_t_interval))
         return 0;
-    if (node->id != 0 && hit_function(node->id, in_ray, inout_t_interval, data))
+    if (node->id > 0 && hit_function(node->id, in_ray, inout_t_interval, data))
         return node->id;
     
     u64 left_id  = (node->left  == NULL) ? 0 : lbvh_node_query_ray(node->left, in_ray, inout_t_interval, hit_function, data);
     u64 right_id = (node->right == NULL) ? 0 : lbvh_node_query_ray(node->right, in_ray, inout_t_interval, hit_function, data);
 
-    return (right_id != 0) ? right_id : left_id;
+    return (right_id > 0) ? right_id : left_id;
 }
 
 internal u64 lbvh_query_ray(LBVH_Tree* lbvh, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {

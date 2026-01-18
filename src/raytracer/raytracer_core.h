@@ -49,8 +49,19 @@ struct RT_Sphere {
     f32 radius;
 };
 
+typedef struct RT_Mesh RT_Mesh;
+struct RT_Mesh {
+    const void* vertices;
+    u32 vertices_count;
+    const u32* indices;
+    u32 indices_count;
+    GEO_Primitive primitive;
+    GEO_VertexAttributes attrs;
+};
+
 typedef enum RT_EntityType {
     RT_EntityType_Sphere,
+    RT_EntityType_Mesh,
     RT_EntityType_Count ENUM_CASE_UNUSED,
 } RT_EntityType;
 
@@ -60,6 +71,7 @@ struct RT_Entity {
     RT_Handle material;
     union {
         RT_Sphere sphere;
+        RT_Mesh mesh;
     };
 };
 
@@ -112,6 +124,7 @@ struct RT_CastSettings {
     vec3_f32 eye;
     vec3_f32 up;
     vec3_f32 forward;
+    vec3_f32 right;
     vec3_f32 viewport;
 
     u8 samples;
@@ -119,6 +132,8 @@ struct RT_CastSettings {
 
     bool defocus;
     vec2_f32 defocus_disk;
+    
+    bool orthographic;
 };
 
 rt_hook RT_Handle rt_make_tracer(RT_TracerSettings settings);

@@ -80,17 +80,17 @@ internal MS_LoadResult ms_load_obj(Arena* arena, NTString8 path, MS_LoadSettings
     // solve settings
     int vertices_per_face;
     if (settings.primitive == GEO_Primitive_ZERO) {
-        settings.primitive = GEO_Primitive_Triangles;
+        settings.primitive = GEO_Primitive_TRI_LIST;
     }
     if (settings.attrs == GEO_VertexAttributes_ZERO) {
         settings.attrs = IntToEnum(GEO_VertexAttributes, GEO_VertexAttributes_P | GEO_VertexAttributes_T | GEO_VertexAttributes_N);
     }
     switch (settings.primitive) {
-        case GEO_Primitive_Lines:         vertices_per_face = 2; break;
-        case GEO_Primitive_LineStrip:     NotImplemented;        break;
-        case GEO_Primitive_Triangles:     vertices_per_face = 3; break;
-        case GEO_Primitive_TriangleStrip: NotImplemented;        break;
-        default:                             Assert(0);
+        case GEO_Primitive_LINE_LIST:  vertices_per_face = 2; break;
+        case GEO_Primitive_LINE_STRIP: NotImplemented;        break;
+        case GEO_Primitive_TRI_LIST:   vertices_per_face = 3; break;
+        case GEO_Primitive_TRI_STRIP:  NotImplemented;        break;
+        default:                       Assert(0);
     }
 
     // load mesh

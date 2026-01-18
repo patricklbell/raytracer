@@ -63,15 +63,37 @@ internal void rt_cpu_build_blas(RT_CPU_BLAS* out_blas, Arena* arena, RT_World* w
     }
 }
 
-static rng3_f32 rt_cpu_entity_to_aabb(RT_Entity* entity) {
+static rng3_f32 rt_cpu_blas_node_to_aabb(const RT_CPU_BLASNode* node) {
+    const RT_Entity* entity = node->entity;
+
     switch (entity->type) {
         case RT_EntityType_Sphere:{
             vec3_f32 r = make_scale_3f32(entity->sphere.radius);
             return make_rng3_f32(sub_3f32(entity->sphere.center, r), add_3f32(entity->sphere.center, r));
         }break;
+        case RT_EntityType_Mesh:{
+            if (node->lbvh == NULL) {
+                const RT_Mesh* mesh = &entity->mesh;
+                
+                vec3_f32* p_start = OffsetPtr(mesh->vertices, geo_vertex_offset(mesh->attrs, GEO_VertexAttributes_P), GEO_VertexType_P);
+                u64 p_stride = geo_vertex_stride(mesh->attrs, GEO_VertexAttributes_P);
+                
+                Assert(mesh->vertices_count > 0);
+                vec3_f32 min = make_scale_3f32(+MAX_F32), max = make_scale_3f32(-MAX_F32);
+                for (u32 idx = 0; idx < mesh->vertices_count; idx++) {
+                    vec3_f32 v = *OffsetPtr(p_start, idx*p_stride, GEO_VertexType_P);
+
+                    min = min_3f32(min, v);
+                    max = max_3f32(max, v);
+                }
+                return make_rng3_f32(min, max);
+            } else {
+                return node->lbvh->root->aabb;
+            }
+        }break;
     }
 
-    AssertAlways(false);
+    NotImplemented;
     return (rng3_f32){};
 }
 
@@ -81,7 +103,7 @@ internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CP
 
         for (u64 idx = 0; idx < in_blas->node_count; idx++) {
             const RT_CPU_BLASNode* node = &in_blas->nodes[idx];
-            lbvh_aabbs[idx] = rt_cpu_entity_to_aabb(node->entity);
+            lbvh_aabbs[idx] = rt_cpu_blas_node_to_aabb(node);
         }
 
         out_tlas->lbvh = lbvh_make(arena, lbvh_aabbs, in_blas->node_count);
@@ -96,7 +118,6 @@ internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CP
 // cpu kernels
 // ============================================================================
 internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {
-    vec3_f32 right = cross_3f32(s->forward, s->up);
     f32 x_norm_sample_size = 1.f/(f32)(width *s->samples);
     f32 y_norm_sample_size = 1.f/(f32)(height*s->samples);
     f32 inv_sample_count = 1.f/((f32)s->samples*s->samples);
@@ -110,8 +131,9 @@ internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec
                 for (int x_sample = 0; x_sample < s->samples; x_sample++) {
                     f32 x_norm = ((f32)x/width ) + ((f32)x_sample/s->samples)*x_norm_sample_size;
                     f32 y_norm = ((f32)y/height) + ((f32)y_sample/s->samples)*y_norm_sample_size;
-                    // either add blue noise or center the sample
+
                     if (s->samples > 1) {
+                        // jitter @todo blue noise
                         x_norm += rand_unit_f32()*x_norm_sample_size;
                         y_norm += rand_unit_f32()*y_norm_sample_size;
                     } else {
@@ -126,19 +148,18 @@ internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec
                     // map to world space and defocus
                     vec3_f32 sample = add_3f32(add_3f32(add_3f32(
                         s->eye,
-                        mul_3f32(right,      view.x)),
+                        mul_3f32(s->right,   view.x)),
                         mul_3f32(s->up,      view.y)),
                         mul_3f32(s->forward, view.z)
                     );
-                    vec3_f32 origin;
+
+                    vec3_f32 origin = (!s->orthographic) ? s->eye : sub_3f32(sample, s->forward);
                     if (s->defocus) {
                         vec2_f32 disk_sample = elmul_2f32(rand_unit_sphere_2f32(), s->defocus_disk);
-                        origin = add_3f32(add_3f32(s->eye,
-                            mul_3f32(right, disk_sample.x)),
-                            mul_3f32(s->up, disk_sample.y)
+                        origin = add_3f32(add_3f32(origin,
+                            mul_3f32(s->right, disk_sample.x)),
+                            mul_3f32(s->up,    disk_sample.y)
                         );
-                    } else {
-                        origin = s->eye;
                     }
 
                     rng3_f32 ray = {
@@ -149,7 +170,7 @@ internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec
                     RT_CPU_TraceContext ctx = zero_struct;
                     ctx.ior[0] = s->ior;
                     RT_CPU_HitRecord record;
-                    *c = add_3f32(*c, rt_cpu_trace_ray(tracer, &ctx, &ray, tracer->max_bounces, rt_cpu_make_pos_interval(), &record));
+                    *c = add_3f32(*c, rt_cpu_trace_ray(tracer, &ctx, &ray, tracer->max_bounces, geo_make_pos_interval(), &record));
                 }
             }
             *c = mul_3f32(*c, inv_sample_count);
@@ -184,7 +205,7 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
             };
             
             RT_CPU_HitRecord r_record;
-            vec3_f32 radiance = rt_cpu_trace_ray(tracer, ctx, &r_ray, depth-1, rt_cpu_make_pos_interval(), &r_record);
+            vec3_f32 radiance = rt_cpu_trace_ray(tracer, ctx, &r_ray, depth-1, geo_make_pos_interval(), &r_record);
             return elmul_3f32(radiance, mat->albedo);
         }break;
         case RT_MaterialType_Dieletric:{
@@ -215,7 +236,7 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
             }
 
             RT_CPU_HitRecord s_record;
-            vec3_f32 radiance = rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, rt_cpu_make_pos_interval(), &s_record);
+            vec3_f32 radiance = rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, geo_make_pos_interval(), &s_record);
 
             if (!reflect) {
                 ctx->ior_count--;
@@ -233,13 +254,15 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
             };
             RT_CPU_HitRecord i_record;
             
-            vec3_f32 radiance = rt_cpu_trace_ray(tracer, ctx, &i_ray, depth-1, rt_cpu_make_pos_interval(), &i_record);
+            vec3_f32 radiance = rt_cpu_trace_ray(tracer, ctx, &i_ray, depth-1, geo_make_pos_interval(), &i_record);
             return radiance;
         }break;
         case RT_MaterialType_Normal:{
             return rt_cpu_normal_to_radiance(in_record->n);
         }break;
     }
+
+    NotImplemented;
     return make_3f32(0,0,0);
 }
 
@@ -265,22 +288,10 @@ static bool rt_cpu_bvh_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_inte
     RT_CPU_BVHData* rt_cpu_data = (RT_CPU_BVHData*)data;
     RT_CPU_BLAS* blas = &rt_cpu_data->tracer->blas;
 
-    Assert(id != 0 && id <= blas->node_count);
+    Assert(id > 0 && id <= blas->node_count);
     RT_CPU_BLASNode* blas_node = &blas->nodes[id-1];
-    RT_Entity* entity = blas_node->entity;
 
-    bool hit = false;
-    switch (entity->type) {
-        case RT_EntityType_Sphere:{
-            hit = rt_cpu_intersect_sphere(rt_cpu_data->tracer, &entity->sphere, in_ray, *inout_t_interval, rt_cpu_data->hit_record);
-        }break;
-    }
-
-    if (hit) {
-        inout_t_interval->max = rt_cpu_data->hit_record->t;
-        rt_cpu_data->hit_record->material = entity->material;
-    }
-    return hit;
+    return rt_cpu_intersect_blas_node(blas_node, in_ray, inout_t_interval, rt_cpu_data->hit_record);
 }
 
 internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
@@ -291,50 +302,58 @@ internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rn
     return lbvh_query_ray(&tracer->tlas.lbvh, in_ray, &interval, &rt_cpu_bvh_hit, (void*)&rt_cpu_bvh_data);
 }
 
-internal bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
-    Assert(in_sphere->radius > 0.f);
+internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const rng3_f32* in_ray, rng_f32* inout_t_interval, RT_CPU_HitRecord* out_record) {
+    RT_Entity* entity = blas_node->entity;
 
-    // Sphere: |p - c|^2 = r^2
-    // Line  : p = t*d + o
-    // => |t*d + o - c|^2 = r^2
-    // => (t*d + o - c) . (t*d + o - c) = r^2
-    // => t^2*|d|^2 + 2*t*d.(o - c) + |o - c|^2 - r^2 = 0
-    // define a, b, c s.t. at^2 + bt + c = 0
-    vec3_f32 o_minus_c = sub_3f32(in_ray->origin, in_sphere->center);
-    f32 a = length2_3f32(in_ray->direction);
-    f32 half_b = dot_3f32(in_ray->direction, o_minus_c);
-    f32 c = length2_3f32(o_minus_c) - in_sphere->radius*in_sphere->radius;
+    bool hit = false;
+    switch (entity->type) {
+        case RT_EntityType_Sphere:{
+            const RT_Sphere* sphere = &entity->sphere;
+            hit = geo_intersect_sphere(in_ray, sphere->center, sphere->radius, inout_t_interval);
+            if (hit) {
+                out_record->t = inout_t_interval->max;
+                out_record->p = add_3f32(in_ray->origin, mul_3f32(in_ray->direction, out_record->t));
+                out_record->n = mul_3f32(sub_3f32(out_record->p, sphere->center), 1.f/sphere->radius);
+            }
+        }break;
+        case RT_EntityType_Mesh:{
+            const RT_Mesh* mesh = &entity->mesh;
 
-    f32 qtr_d = half_b*half_b - a*c;
-    if (qtr_d < 0.f)
-        return false;
-    f32 half_sqrt_d = sqrt_f32(qtr_d);
+            vec3_f32* p_start = OffsetPtr(mesh->vertices, geo_vertex_offset(mesh->attrs, GEO_VertexAttributes_P), GEO_VertexType_P);
+            u64 p_stride = geo_vertex_stride(mesh->attrs, GEO_VertexAttributes_P);
 
-    // since a is always positive we know - is the closer solution
-    f32 t = (-half_b - half_sqrt_d)/a;
-    if (!rt_cpu_in_interval(t, &interval)) {
-        t = (-half_b + half_sqrt_d)/a;
-        if (!rt_cpu_in_interval(t, &interval))
-            return false;
+            Assert(mesh->primitive == GEO_Primitive_TRI_LIST); // @todo
+            bool auto_index = mesh->indices_count == 0;
+
+            if (auto_index) {
+                for (u32 idx = 0; idx < mesh->vertices_count; idx+=3) {
+                    vec3_f32 v0 = *OffsetPtr(p_start, (idx+0)*p_stride, GEO_VertexType_P);
+                    vec3_f32 v1 = *OffsetPtr(p_start, (idx+1)*p_stride, GEO_VertexType_P);
+                    vec3_f32 v2 = *OffsetPtr(p_start, (idx+2)*p_stride, GEO_VertexType_P);
+    
+                    hit |= geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval);
+                }
+            } else {
+                for (u32 idx = 0; idx < mesh->indices_count; idx+=3) {
+                    vec3_f32 v0 = *OffsetPtr(p_start, (mesh->indices[idx+0])*p_stride, GEO_VertexType_P);
+                    vec3_f32 v1 = *OffsetPtr(p_start, (mesh->indices[idx+1])*p_stride, GEO_VertexType_P);
+                    vec3_f32 v2 = *OffsetPtr(p_start, (mesh->indices[idx+2])*p_stride, GEO_VertexType_P);
+    
+                    hit |= geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval);
+                }
+            }
+        }
     }
-
-    out_record->p = add_3f32(in_ray->origin, mul_3f32(in_ray->direction, t));
-    out_record->t = t;
-    out_record->n = mul_3f32(sub_3f32(out_record->p, in_sphere->center), 1.f/in_sphere->radius);
-
-    return true;
+    
+    if (hit) {
+        out_record->material = entity->material;
+    }
+    return hit;
 }
 
 // ============================================================================
 // helpers
 // ============================================================================
-internal rng_f32 rt_cpu_make_pos_interval() {
-    return (rng_f32){EPSILON_F32, MAX_F32};
-}
-internal bool rt_cpu_in_interval(f32 x, const rng_f32* in_interval) {
-    return x >= in_interval->min && x <= in_interval->max; 
-}
-
 internal vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal) {
     vec3_f32 i = add_3f32(rand_unit_sphere_3f32(), normal);
     bool near_zero = all_3b(leq_3f32_f32(abs_3f32(i), EPSILON_F32));

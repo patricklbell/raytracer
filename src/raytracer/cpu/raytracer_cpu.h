@@ -66,14 +66,11 @@ internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, c
 // intersection
 // ============================================================================
 internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record);
-internal bool rt_cpu_intersect_sphere(RT_CPU_Tracer* tracer, const RT_Sphere* in_sphere, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record);
+internal bool rt_cpu_intersect_blas_node(const RT_CPU_BLASNode* blas_node, const rng3_f32* in_ray, rng_f32* inout_t_interval, RT_CPU_HitRecord* out_record);
 
 // ============================================================================
 // helpers
 // ============================================================================
-internal rng_f32 rt_cpu_make_pos_interval();
-internal bool rt_cpu_in_interval(f32 x, const rng_f32* in_interval);
-
 internal vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal);
 internal f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta);
 internal vec3_f32 rt_cpu_normal_to_radiance(vec3_f32 normal);

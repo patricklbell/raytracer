@@ -35,11 +35,17 @@ internal force_inline u64 geo_vertex_i_offset(GEO_VertexAttributes attrs, GEO_Ve
 // primitives
 typedef enum GEO_Primitive {
     GEO_Primitive_ZERO = 0,
-    GEO_Primitive_Points,
-    GEO_Primitive_Lines,
-    GEO_Primitive_LineStrip,
-    GEO_Primitive_Triangles,
-    GEO_Primitive_TriangleStrip,
-    GEO_Primitive_Quads,
+    GEO_Primitive_POINT_LIST,
+    GEO_Primitive_LINE_LIST,
+    GEO_Primitive_LINE_STRIP,
+    GEO_Primitive_TRI_LIST,
+    GEO_Primitive_TRI_STRIP,
+    GEO_Primitive_RECT_LIST,
     GEO_Primitive_COUNT ENUM_CASE_UNUSED,
 } GEO_Primitive;
+
+// intersection
+internal rng_f32 geo_make_pos_interval();
+internal bool geo_in_interval(f32 x, const rng_f32* in_interval);
+internal bool geo_intersect_sphere(const rng3_f32* in_ray, vec3_f32 center, f32 radius, rng_f32* inout_interval);
+internal bool geo_intersect_tri(const rng3_f32* in_ray, vec3_f32 in_tri_a, vec3_f32 in_tri_b, vec3_f32 in_tri_c, rng_f32* inout_interval);
