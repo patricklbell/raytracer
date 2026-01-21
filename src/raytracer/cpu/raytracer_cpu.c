@@ -317,7 +317,7 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
                 ctx->ior_count--;
             }
 
-                        return add_3f32(s_radiance, e_radiance);
+            return add_3f32(s_radiance, e_radiance);
         }break;
         case RT_MaterialType_Metal:{
             vec3_f32 i = reflect_3f32(in_ray->direction, in_record->n);
@@ -494,16 +494,11 @@ internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const
             };
 
             // transform to local (model) space
+            // @note direction of local ray is not normalized
             rng3_f32 local_ray = rt_cpu_inv_transform_ray(*in_ray, mesh_inst->translation, mesh_inst->rotation, mesh_inst->scale);
-            f32 t_local_to_world = length_3f32(elmul_3f32(local_ray.direction, mesh_inst->scale));
-            Assert(abs_f32(t_local_to_world) > EPSILON_F32);
-            f32 t_world_to_local = 1.f/t_local_to_world;
-            rng_f32 local_interval = {inout_t_interval->min*t_world_to_local, inout_t_interval->max*t_world_to_local};
-
-            hit = lbvh_query_ray(&blas_node->lbvh, &local_ray, &local_interval, &rt_cpu_blas_node_hit, (void*)&blas_node_data);
+            hit = lbvh_query_ray(&blas_node->lbvh, &local_ray, inout_t_interval, &rt_cpu_blas_node_hit, (void*)&blas_node_data);
             if (hit) {
                 out_record->tri_idx = blas_node_data.hit_record.tri_idx;
-                inout_t_interval->max = local_interval.max*t_local_to_world;
             }
         }
     }
@@ -591,6 +586,6 @@ internal rng3_f32 rt_cpu_transform_aabb(rng3_f32 aabb, vec3_f32 translation, vec
 internal rng3_f32 rt_cpu_inv_transform_ray(rng3_f32 ray, vec3_f32 translation, vec4_f32 rotation, vec3_f32 scale) {
     return (rng3_f32){
         .origin=rt_cpu_inv_transform_point(ray.origin, translation, rotation, scale),
-        .direction=normalize_3f32(rt_cpu_inv_transform_dir(ray.direction, rotation, scale)),
+        .direction=rt_cpu_inv_transform_dir(ray.direction, rotation, scale),
     };
 }
