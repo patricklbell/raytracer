@@ -1,3 +1,7 @@
+#ifdef BUILD_DEBUG
+    #include "extra/dump.c"
+#endif
+
 RSFORCEINLINE int lbvh_morton_code_is_before(void* elementa, void* elementb) {
     return (u64*)elementa < (u64*)elementb;
 }

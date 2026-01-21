@@ -1,3 +1,7 @@
+#ifdef BUILD_DEBUG
+    #include "extra/dump.c"
+#endif
+
 internal RT_CPU_Tracer* rt_cpu_handle_to_tracer(RT_Handle handle) {
     return (RT_CPU_Tracer*)handle.v64[0];
 }
@@ -158,7 +162,7 @@ internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CP
     }}
 
     #ifdef BUILD_DEBUG
-        lbvh_dump_to_file(&out_tlas->lbvh, "out.bvh");
+        lbvh_dump_tree(&out_tlas->lbvh, "out.bvh");
     #endif
 }
 
@@ -166,6 +170,10 @@ internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CP
 // cpu kernels
 // ============================================================================
 internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {
+#if BUILD_DEBUG
+    rt_cpu_dump_begin_ray_hit_record("out.rays");
+#endif
+
     f32 x_norm_sample_size = 1.f/(f32)(width *s->samples);
     f32 y_norm_sample_size = 1.f/(f32)(height*s->samples);
     f32 inv_sample_count = 1.f/((f32)s->samples*s->samples);
@@ -242,6 +250,10 @@ internal vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* c
 #define RT_CPU_SURFACE_OFFSET 0.001f
 
 internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth, RT_CPU_HitRecord* in_record) {
+#if BUILD_DEBUG
+    rt_cpu_dump_add_ray_hit_record(in_ray, in_record, "out.rays");
+#endif
+
     if (rt_is_zero_handle(in_record->material)) {
         return make_scale_3f32(1.f);
     }
@@ -329,6 +341,10 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
 }
 
 internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth) {
+#if BUILD_DEBUG
+    rt_cpu_dump_add_ray_miss_record(in_ray, "out.rays");
+#endif
+
     if (!tracer->sky) {
         return make_scale_3f32(0.f);
     }

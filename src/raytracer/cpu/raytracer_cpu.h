@@ -118,3 +118,7 @@ internal vec3_f32 rt_cpu_inv_transform_dir(vec3_f32 p, vec4_f32 rotation, vec3_f
 
 internal rng3_f32 rt_cpu_transform_aabb(rng3_f32 aabb, vec3_f32 translation, vec4_f32 rotation, vec3_f32 scale);
 internal rng3_f32 rt_cpu_inv_transform_ray(rng3_f32 ray, vec3_f32 translation, vec4_f32 rotation, vec3_f32 scale);
+
+#ifdef BUILD_DEBUG
+    #include "extra/dump.h"
+#endif
