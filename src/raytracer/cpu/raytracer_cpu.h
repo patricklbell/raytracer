@@ -107,7 +107,8 @@ internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const
 // ============================================================================
 // helpers
 // ============================================================================
-internal vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal);
+internal vec3_f32 rt_cpu_cosine_sample_hemisphere(vec3_f32 normal);
+
 internal f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta);
 internal vec3_f32 rt_cpu_normal_to_radiance(vec3_f32 normal);
 

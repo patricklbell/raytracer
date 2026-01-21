@@ -266,15 +266,19 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
 
     switch (mat->type) {
         case RT_MaterialType_Lambertian:{
-            rng3_f32 r_ray = {
+            rng3_f32 s_ray = {
                 .origin = add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
-                .direction = rt_cpu_cosine_sample(in_record->n),
+                .direction = rt_cpu_cosine_sample_hemisphere(in_record->n),
             };
             
             RT_CPU_HitRecord r_record;
-            vec3_f32 i_radiance = rt_cpu_trace_ray(tracer, ctx, &r_ray, depth-1, geo_make_pos_interval(), &r_record);
-            vec3_f32 s_radiance = elmul_3f32(i_radiance, mat->albedo);
+            vec3_f32 i_radiance = rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, geo_make_pos_interval(), &r_record);
+            vec3_f32 brdf_times_pi = mat->albedo;
+
+            // drop extra terms since pdf = cos_theta / PI
+            vec3_f32 s_radiance = elmul_3f32(brdf_times_pi, i_radiance); // * (cos_theta / PI) / pdf
             vec3_f32 e_radiance = mat->emissive;
+
             return add_3f32(s_radiance, e_radiance);
         }break;
         case RT_MaterialType_Dieletric:{
@@ -307,26 +311,26 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
 
             RT_CPU_HitRecord s_record;
             vec3_f32 s_radiance = rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, geo_make_pos_interval(), &s_record);
+            vec3_f32 e_radiance = mat->emissive;
 
             if (!reflect) {
                 ctx->ior_count--;
             }
 
-            vec3_f32 e_radiance = mat->emissive;
-            return add_3f32(s_radiance, e_radiance);
+                        return add_3f32(s_radiance, e_radiance);
         }break;
         case RT_MaterialType_Metal:{
             vec3_f32 i = reflect_3f32(in_ray->direction, in_record->n);
             // approximation of specular lobe
             i = add_3f32(i, mul_3f32(rand_unit_sphere_3f32(), mat->roughness));
 
-            rng3_f32 i_ray = {
+            rng3_f32 s_ray = {
                 .origin=add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
                 .direction=normalize_3f32(i),
             };
             RT_CPU_HitRecord i_record;
             
-            return rt_cpu_trace_ray(tracer, ctx, &i_ray, depth-1, geo_make_pos_interval(), &i_record);
+            return rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, geo_make_pos_interval(), &i_record);
         }break;
         case RT_MaterialType_Normal:{
             return rt_cpu_normal_to_radiance(in_record->n);
@@ -513,10 +517,29 @@ internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const
 // ============================================================================
 // helpers
 // ============================================================================
-internal vec3_f32 rt_cpu_cosine_sample(vec3_f32 normal) {
-    vec3_f32 i = add_3f32(rand_unit_sphere_3f32(), normal);
-    bool near_zero = all_3b(leq_3f32_f32(abs_3f32(i), EPSILON_F32));
-    return near_zero ? normal : normalize_3f32(i);
+static vec3_f32 rt_cpu_transform_uvw_to_hemisphere(vec3_f32 s, vec3_f32 n) {
+    // @perf
+    vec3_f32 u_basis = orthogonal_3f32(n);
+    vec3_f32 v_basis = cross_3f32(u_basis, n);
+    vec3_f32 w_basis = n;
+
+    return add_3f32(add_3f32(
+        mul_3f32(u_basis, s.U),
+        mul_3f32(v_basis, s.V)),
+        mul_3f32(w_basis, s.W)
+    );
+}
+
+internal vec3_f32 rt_cpu_cosine_sample_hemisphere(vec3_f32 n) {
+    f32 r1 = rand_unit_f32();
+    f32 r2 = rand_unit_f32();
+
+    f32 phi = 2*PI_F32*r1;
+    f32 u = cos_f32(phi)*sqrt_f32(r2);
+    f32 v = sin_f32(phi)*sqrt_f32(r2);
+    f32 w = sqrt_f32(1 - r2);
+
+    return rt_cpu_transform_uvw_to_hemisphere((vec3_f32){.U=u,.V=v,.W=w}, n);
 }
 internal f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta) {
     f32 sqrt_R0 = (eta_i - eta_t) / (eta_i + eta_t);
