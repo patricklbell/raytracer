@@ -11,6 +11,16 @@ static RT_Handle add_lambertian_billboard_material(RT_World* world, vec3_f32 alb
     return mat;
 }
 
+static RT_Handle add_metal_billboard_material(RT_World* world, f32 roughness) {
+    RT_Handle mat = rt_world_add_material(world);
+    RT_Material* mat_ptr = rt_world_resolve_material(world, mat);
+    mat_ptr->type = RT_MaterialType_Metal;
+    mat_ptr->roughness = roughness;
+    mat_ptr->billboard = true;
+
+    return mat;
+}
+
 static RT_Handle add_light_material(RT_World* world, vec3_f32 emissive) {
     RT_Handle mat = rt_world_add_material(world);
     RT_Material* mat_ptr = rt_world_resolve_material(world, mat);
@@ -21,10 +31,10 @@ static RT_Handle add_light_material(RT_World* world, vec3_f32 emissive) {
 }
 
 static void add_quad(RT_World* world, RT_Handle mesh, RT_Handle mat, vec3_f32 c, vec3_f32 u, vec3_f32 v) {
-    const vec3_f32 quad_n = (vec3_f32){.x=0,.y=1,.z=0};
+    const vec3_f32 unit_quad_n = (vec3_f32){.x=0,.y=1,.z=0};
 
-    vec3_f32 n = cross_3f32(u, v);
-    vec4_f32 r = make_a_to_b_quat(quad_n, n);
+    vec3_f32 n = cross_3f32(v, u);
+    vec4_f32 r = make_a_to_b_quat(unit_quad_n, n);
     vec3_f32 s = make_3f32(length_3f32(u), 1, length_3f32(v));
 
     RT_Handle instance = rt_world_add_instance(world);
@@ -35,6 +45,35 @@ static void add_quad(RT_World* world, RT_Handle mesh, RT_Handle mat, vec3_f32 c,
     instance_ptr->mesh.translation = c;
     instance_ptr->mesh.rotation = r;
     instance_ptr->mesh.scale = s;
+}
+
+static void add_box(RT_World* world, RT_Handle mesh, RT_Handle mat, vec3_f32 a, vec3_f32 b) {
+    const vec3_f32 unit_box_d = (vec3_f32){1,1,1};
+
+    vec3_f32 min = min_3f32(a, b);
+    vec3_f32 max = max_3f32(a, b);
+    vec3_f32 c = mul_3f32(add_3f32(min, max), 0.5f);
+    vec3_f32 s = mul_3f32(sub_3f32(max, min), 0.5f);
+    vec4_f32 r = make_identity_quat();
+
+    RT_Handle instance = rt_world_add_instance(world);
+    RT_Instance* instance_ptr = rt_world_resolve_instance(world, instance);
+    instance_ptr->type = RT_InstanceType_Mesh;
+    instance_ptr->material = mat;
+    instance_ptr->mesh.handle = mesh;
+    instance_ptr->mesh.translation = c;
+    instance_ptr->mesh.rotation = r;
+    instance_ptr->mesh.scale = s;
+}
+
+
+static void add_sphere(RT_World* world, RT_Handle mat, vec3_f32 center, f32 radius) {
+    RT_Handle instance = rt_world_add_instance(world);
+    RT_Instance* instance_ptr = rt_world_resolve_instance(world, instance);
+    instance_ptr->type = RT_InstanceType_Sphere;
+    instance_ptr->material = mat;
+    instance_ptr->sphere.center = center;
+    instance_ptr->sphere.radius = radius;
 }
 
 demo_hook void render(const DEMO_Settings* settings) {
@@ -110,7 +149,8 @@ demo_hook void render(const DEMO_Settings* settings) {
                 RT_Handle white = add_lambertian_billboard_material(world, make_scale_3f32(0.73));
                 RT_Handle red = add_lambertian_billboard_material(world, make_3f32(0.65,0.05,0.05));
                 RT_Handle green = add_lambertian_billboard_material(world, make_3f32(0.12,0.45,0.15));
-                RT_Handle light = add_light_material(world, make_scale_3f32(15));
+                RT_Handle light = add_light_material(world, make_scale_3f32(16));
+                RT_Handle metal = add_metal_billboard_material(world, 0.01f);
 
                 // floor
                 add_quad(world, quad, white,
@@ -153,6 +193,18 @@ demo_hook void render(const DEMO_Settings* settings) {
                    make_3f32(extents/4.f, 0, 0),
                    make_3f32(0, 0, extents/4.f)
                 );
+
+                // short box
+                add_box(world, box, white,
+                    elmul_3f32(sub_3f32(make_3f32(130, 0, 65), make_scale_3f32(extents)), make_3f32(-1,1,-1)),
+                    elmul_3f32(sub_3f32(make_3f32(295, 165, 230), make_scale_3f32(extents)), make_3f32(-1,1,-1))
+                );
+
+                // tall box
+                add_box(world, box, white,
+                    elmul_3f32(sub_3f32(make_3f32(265, 0, 295), make_scale_3f32(extents)), make_3f32(-1,1,-1)),
+                    elmul_3f32(sub_3f32(make_3f32(430, 330, 460), make_scale_3f32(extents)), make_3f32(-1,1,-1))
+                );
             }
 
             rt_tracer_build_tlas(tracer, world);
@@ -162,7 +214,7 @@ demo_hook void render(const DEMO_Settings* settings) {
                 vec3_f32* buffer = push_array(scratch.arena, vec3_f32, width*height);
                 
                 RT_CastSettings csettings = get_rt_cast_settings(settings,
-                    make_3f32(0, 0, 2.f*extents), make_3f32(0, 0, 0),
+                    make_3f32(0, 0, 2.4f*extents), make_3f32(0, 0, 0),
                     (DEMO_ExtraCastSettings){.vfov=DegreesToRad(40)}
                 );
                 rt_tracer_cast(tracer, csettings, buffer, width, height);

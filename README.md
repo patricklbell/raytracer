@@ -1,3 +1,5 @@
+![Cornell box](docs/cornell.png "Cornell box")
+
 ## Platforms
 - Windows x86/x64
 - Linux x86/x64/ARM32/ARM64
@@ -20,3 +22,9 @@ Support for profiling with [Tracy](https://github.com/wolfpld/tracy) can be incl
 included in the repo under `src/third_party/tracy` which needs to be initialised and is 
 where you can build the profiling tools. Profiling requires a C++ compiler, since MSVC does not support
 compound literals in C++, profiling on Windows requires compiling with clang++.
+
+## Blender
+There is a blender script for debugging the TLAS BVH tree and raygen. Run `extra/blender.py` in the scripting tab.
+
+
+![Blender plugin](docs/blender.png "Blender plugin")

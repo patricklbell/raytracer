@@ -94,9 +94,7 @@ int main(int argc, char** argv) {
         return !help;
     }
 
-    if (seed != 0) {
-        rand_seed((u64)seed);
-    }
+    rand_seed((u64)seed);
 
     // call demo hook
     render(&settings);

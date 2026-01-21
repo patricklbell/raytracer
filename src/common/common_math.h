@@ -48,6 +48,11 @@ union vec3_f32 {
         f32 s;
         f32 l;
     };
+    struct {
+        f32 U;
+        f32 V;
+        f32 W;
+    };
 
     f32 v[3];
 };

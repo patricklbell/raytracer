@@ -31,6 +31,11 @@ static void add_dieletric_sphere(RT_World* world, vec3_f32 center, f32 radius, f
     material_ptr->type = RT_MaterialType_Dieletric;
     material_ptr->ior = ior;
 }
+static void add_light_sphere(RT_World* world, vec3_f32 center, f32 radius, vec3_f32 emissive) {
+    RT_Material* material_ptr = add_sphere(world, center, radius);
+    material_ptr->type = RT_MaterialType_Light;
+    material_ptr->emissive = emissive;
+}
 
 demo_hook void render(const DEMO_Settings* settings) {
     {DeferResource(RT_World* world = rt_make_world((RT_WorldSettings){}), rt_world_cleanup(world)) {
@@ -45,6 +50,8 @@ demo_hook void render(const DEMO_Settings* settings) {
             add_metal_sphere(world, make_3f32(+1.6,0,0), 0.5, 0.9);
             // add_dieletric_sphere(world, make_3f32(0,+1.6,0), 0.5, 1.52);
             add_lambertian_sphere(world, make_3f32(0,-101,0), 100.0, make_3f32(0.5,0.6,0.5));
+
+            // add_light_sphere(world, make_3f32(0,-101,0), 100.0, make_scale_3f32(16));
 
             rt_tracer_build_tlas(tracer, world);
 
