@@ -110,6 +110,10 @@ struct RT_Mesh {
     GEO_Primitive primitive;
     GEO_VertexAttributes attrs;
 
+#if BUILD_DEBUG
+    NTString8 name;
+#endif
+
     // this breaks the abstraction but avoids a bunch of unnecessary work
     u64 blas_id;
 };

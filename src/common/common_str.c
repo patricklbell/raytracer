@@ -32,3 +32,19 @@ internal b8 ntstr8_eq(NTString8 a, NTString8 b) {
 internal u64 ntstr8_to_u64(NTString8 str) {
     return (u64)strtoull(str.cstr, NULL, 10);
 }
+
+internal NTString8 ntstr8_concatenate(Arena* arena, NTString8 a, NTString8 b) {
+    NTString8 result;
+
+    result.length = a.length + b.length;
+    result.cstr = push_array_no_zero(arena, char, result.length+1);
+
+    for (u64 i = 0; i < a.length; i++) {
+        result.cstr[i] = a.cstr[i];
+    }
+    for (u64 i = a.length; i < result.length; i++) {
+        result.cstr[i] = b.cstr[i - a.length];
+    }
+    result.cstr[result.length] = '\0';
+    return result;
+}

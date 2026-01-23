@@ -51,5 +51,14 @@ typedef enum GEO_WindingOrder {
 // intersection
 internal rng_f32 geo_make_pos_interval();
 internal bool geo_in_interval(f32 x, const rng_f32* in_interval);
-internal bool geo_intersect_sphere(const rng3_f32* in_ray, vec3_f32 center, f32 radius, rng_f32* inout_interval);
-internal bool geo_intersect_tri(const rng3_f32* in_ray, vec3_f32 in_tri_a, vec3_f32 in_tri_b, vec3_f32 in_tri_c, rng_f32* inout_interval);
+
+internal bool geo_intersect_sphere(
+    const rng3_f32* in_ray,
+    vec3_f32 center, f32 radius,
+    rng_f32* inout_interval
+);
+internal bool geo_intersect_tri(
+    const rng3_f32* in_ray,
+    vec3_f32 in_tri_a, vec3_f32 in_tri_b, vec3_f32 in_tri_c,
+    rng_f32* inout_interval, vec2_f32* out_uv
+);

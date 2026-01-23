@@ -88,6 +88,13 @@ static void rt_cpu_blas_node_from_mesh(RT_CPU_BLASNode* out_node, Arena* arena, 
         }
 
         out_node->lbvh = lbvh_make(arena, tri_aabbs, tris_count);
+
+    #if BUILD_DEBUG
+        if (mesh->name.length > 0) {
+            NTString8 path = ntstr8_concatenate(scratch.arena, mesh->name, ntstr8_lit(".bvh"));
+            lbvh_dump_tree(&out_node->lbvh, path.cstr);
+        }
+    #endif
     }}
 }
 
@@ -375,6 +382,23 @@ static bool rt_cpu_tlas_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_int
     return rt_cpu_intersect_tlas_node(node, in_ray, inout_t_interval, &data->hit_record);
 }
 
+static void rt_cpu_get_tri(const RT_CPU_BLASNode* blas_node, GEO_VertexAttributes attr, u32 idx, vec3_f32* out_0, vec3_f32* out_1, vec3_f32* out_2) {
+    const RT_Mesh* mesh = blas_node->mesh;
+
+    vec3_f32* start = OffsetPtr(mesh->vertices, geo_vertex_offset(mesh->attrs, attr), vec3_f32);
+    u64 stride = geo_vertex_stride(mesh->attrs, GEO_VertexAttributes_P);
+
+    if (blas_node->auto_index) {
+        *out_0 = *OffsetPtr(start, (idx+0)*stride, vec3_f32);
+        *out_1 = *OffsetPtr(start, (idx+1)*stride, vec3_f32);
+        *out_2 = *OffsetPtr(start, (idx+2)*stride, vec3_f32);
+    } else {
+        *out_0 = *OffsetPtr(start, (mesh->indices[idx+0])*stride, vec3_f32);
+        *out_1 = *OffsetPtr(start, (mesh->indices[idx+1])*stride, vec3_f32);
+        *out_2 = *OffsetPtr(start, (mesh->indices[idx+2])*stride, vec3_f32);
+    }
+}
+
 internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
     RT_CPU_TLASData tlas_data = {
         .hit_record = {},
@@ -407,28 +431,24 @@ internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rn
 
                 Assert(mesh->primitive == GEO_Primitive_TRI_LIST); // @todo
 
-                if (!(mesh->attrs & GEO_VertexAttributes_N)) {
-                    vec3_f32* p_start = OffsetPtr(mesh->vertices, geo_vertex_offset(mesh->attrs, GEO_VertexAttributes_P), GEO_VertexType_P);
-                    u64 p_stride = geo_vertex_stride(mesh->attrs, GEO_VertexAttributes_P);
-    
-                    vec3_f32 v0,v1,v2;
-                    u32 idx = hit_record->tri_idx;
-                    if (blas_node->auto_index) {
-                        v0 = *OffsetPtr(p_start, (idx+0)*p_stride, GEO_VertexType_P);
-                        v1 = *OffsetPtr(p_start, (idx+1)*p_stride, GEO_VertexType_P);
-                        v2 = *OffsetPtr(p_start, (idx+2)*p_stride, GEO_VertexType_P);
-                    } else {
-                        v0 = *OffsetPtr(p_start, (mesh->indices[idx+0])*p_stride, GEO_VertexType_P);
-                        v1 = *OffsetPtr(p_start, (mesh->indices[idx+1])*p_stride, GEO_VertexType_P);
-                        v2 = *OffsetPtr(p_start, (mesh->indices[idx+2])*p_stride, GEO_VertexType_P);
-                    }
-    
-                    Assert(tracer->winding_order == GEO_WindingOrder_CCW);
-                    vec3_f32 tri_n = cross_3f32(sub_3f32(v1, v0), sub_3f32(v2, v0));
-                    out_record->n = normalize_3f32(rt_cpu_transform_dir(tri_n, mesh_inst->rotation, mesh_inst->scale));
+                vec3_f32 v0,v1,v2;
+                rt_cpu_get_tri(blas_node, GEO_VertexAttributes_P, hit_record->tri_idx, &v0, &v1, &v2);
+
+                vec3_f32 tri_n;
+                if (mesh->attrs & GEO_VertexAttributes_N) {
+                    vec3_f32 n0,n1,n2;
+                    rt_cpu_get_tri(blas_node, GEO_VertexAttributes_N, hit_record->tri_idx, &n0, &n1, &n2);
+                    tri_n = add_3f32(add_3f32(
+                        mul_3f32(n0, hit_record->uv.U),
+                        mul_3f32(n1, hit_record->uv.V)),
+                        mul_3f32(n2, 1 - hit_record->uv.U - hit_record->uv.V)
+                    );
                 } else {
-                    NotImplemented;
+                    Assert(tracer->winding_order == GEO_WindingOrder_CCW);
+                    tri_n = cross_3f32(sub_3f32(v1, v0), sub_3f32(v2, v0));
                 }
+
+                out_record->n = normalize_3f32(rt_cpu_transform_dir(tri_n, mesh_inst->rotation, mesh_inst->scale));
             }
         }
     }
@@ -450,7 +470,7 @@ static bool rt_cpu_blas_node_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_
         vec3_f32 v1 = *OffsetPtr(data->p_start, (idx+1)*data->p_stride, GEO_VertexType_P);
         vec3_f32 v2 = *OffsetPtr(data->p_start, (idx+2)*data->p_stride, GEO_VertexType_P);
 
-        if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval)) {
+        if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval, &data->hit_record.uv)) {
             hit = true;
             data->hit_record.tri_idx = idx;
         }
@@ -462,7 +482,7 @@ static bool rt_cpu_blas_node_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_
         vec3_f32 v1 = *OffsetPtr(data->p_start, (data->mesh->indices[idx+1])*data->p_stride, GEO_VertexType_P);
         vec3_f32 v2 = *OffsetPtr(data->p_start, (data->mesh->indices[idx+2])*data->p_stride, GEO_VertexType_P);
 
-        if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval)) {
+        if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval, &data->hit_record.uv)) {
             hit = true;
             data->hit_record.tri_idx = idx;
         }
@@ -499,6 +519,7 @@ internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const
             hit = lbvh_query_ray(&blas_node->lbvh, &local_ray, inout_t_interval, &rt_cpu_blas_node_hit, (void*)&blas_node_data);
             if (hit) {
                 out_record->tri_idx = blas_node_data.hit_record.tri_idx;
+                out_record->uv = blas_node_data.hit_record.uv;
             }
         }
     }
@@ -534,7 +555,7 @@ internal vec3_f32 rt_cpu_cosine_sample_hemisphere(vec3_f32 n) {
     f32 v = sin_f32(phi)*sqrt_f32(r2);
     f32 w = sqrt_f32(1 - r2);
 
-    return rt_cpu_transform_uvw_to_hemisphere((vec3_f32){.U=u,.V=v,.W=w}, n);
+    return normalize_3f32(rt_cpu_transform_uvw_to_hemisphere((vec3_f32){.U=u,.V=v,.W=w}, n));
 }
 internal f32 rt_cpu_fresnel_schlick(f32 eta_i, f32 eta_t, f32 cos_theta) {
     f32 sqrt_R0 = (eta_i - eta_t) / (eta_i + eta_t);
@@ -572,8 +593,8 @@ internal rng3_f32 rt_cpu_transform_aabb(rng3_f32 aabb, vec3_f32 translation, vec
     };
 
     rng3_f32 out;
-    out.min = (vec3_f32){+MAX_F32, +MAX_F32, +MAX_F32};
-    out.max = (vec3_f32){-MAX_F32, -MAX_F32, -MAX_F32};
+    out.min = make_scale_3f32(+MAX_F32);
+    out.max = make_scale_3f32(-MAX_F32);
 
     for (int i = 0; i < 8; i++) {
         vec3_f32 p = rt_cpu_transform_point(corners[i], translation, rotation, scale);

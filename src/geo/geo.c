@@ -72,7 +72,7 @@ internal bool geo_intersect_sphere(
 internal bool geo_intersect_tri(
     const rng3_f32* in_ray,
     vec3_f32 in_tri_a, vec3_f32 in_tri_b, vec3_f32 in_tri_c,
-    rng_f32* inout_interval
+    rng_f32* inout_interval, vec2_f32* out_uvw
 ) {
     vec3_f32 edge1 = sub_3f32(in_tri_b, in_tri_a);
     vec3_f32 edge2 = sub_3f32(in_tri_c, in_tri_a);
@@ -103,5 +103,7 @@ internal bool geo_intersect_tri(
     }
     
     inout_interval->max = t;
+    out_uvw->U = u;
+    out_uvw->V = v;
     return true;
 }

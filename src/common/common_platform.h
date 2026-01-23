@@ -152,6 +152,11 @@
 #if !defined(BUILD_DEBUG)
     #define BUILD_DEBUG 1
 #endif
+#if BUILD_DEBUG
+    #define BUILD_DEBUG_X(...) __VA_ARGS__
+#else
+    #define BUILD_DEBUG_X(...) 
+#endif
 
 #if !defined(BUILD_VERSION_MAJOR)
     #define BUILD_VERSION_MAJOR 0

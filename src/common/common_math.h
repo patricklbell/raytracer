@@ -6,6 +6,11 @@ union vec2_f32 {
         f32 x;
         f32 y;
     };
+    struct {
+        f32 U;
+        f32 V;
+    };
+
 
     f32 v[2];
 };
@@ -92,6 +97,21 @@ union vec3_b {
 };
 
 internal vec3_b leq_3f32_f32(vec3_f32 x, f32 y);
+internal vec3_b leq_3f32(vec3_f32 x, vec3_f32 y);
+internal vec3_b lt_3f32_f32(vec3_f32 x, f32 y);
+internal vec3_b lt_3f32(vec3_f32 x, vec3_f32 y);
+internal vec3_b gt_3f32_f32(vec3_f32 x, f32 y);
+internal vec3_b gt_3f32(vec3_f32 x, vec3_f32 y);
+internal vec3_b geq_3f32_f32(vec3_f32 x, f32 y);
+internal vec3_b geq_3f32(vec3_f32 x, vec3_f32 y);
+internal vec3_b eq_3f32_f32(vec3_f32 x, f32 y);
+internal vec3_b eq_3f32(vec3_f32 x, vec3_f32 y);
+internal vec3_b neq_3f32_f32(vec3_f32 x, f32 y);
+internal vec3_b neq_3f32(vec3_f32 x, vec3_f32 y);
+internal vec3_b is_nan_3f32(vec3_f32 x);
+internal vec3_b is_inf_3f32(vec3_f32 x);
+
+internal vec3_b not_3b(vec3_f32 x);
 internal bool   all_3b(vec3_b x);
 internal bool   any_3b(vec3_b x);
 

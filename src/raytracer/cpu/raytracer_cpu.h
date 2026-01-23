@@ -79,6 +79,7 @@ typedef struct RT_CPU_TLASHitRecord RT_CPU_TLASHitRecord;
 struct RT_CPU_TLASHitRecord {
     const RT_CPU_TLASNode* tlas_node;
     u32 tri_idx;
+    vec2_f32 uv;
 };
 
 typedef struct RT_CPU_TLASData RT_CPU_TLASData;
@@ -90,6 +91,7 @@ struct RT_CPU_TLASData {
 typedef struct RT_CPU_BLASNodeHitRecord RT_CPU_BLASNodeHitRecord;
 struct RT_CPU_BLASNodeHitRecord {
     u32 tri_idx;
+    vec2_f32 uv;
 };
 
 typedef struct RT_CPU_BLASNodeData RT_CPU_BLASNodeData;

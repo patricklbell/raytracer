@@ -63,9 +63,24 @@ internal vec3_f32 rand_unit_hemisphere_3f32(vec3_f32 n) {
     return (dot_3f32(s, n) < 0.f) ? mul_3f32(s, -1.f) : s;
 }
 
-internal vec3_b leq_3f32_f32(vec3_f32 x, f32 y) { return (vec3_b) {.x = x.x <= y,.y = x.y <= y,.z = x.z <= y}; }
-internal bool   all_3b(vec3_b x)                { return x.x && x.y && x.z; }
-internal bool   any_3b(vec3_b x)                { return x.x || x.y || x.z; }
+internal vec3_b leq_3f32_f32(vec3_f32 x, f32 y)  { return (vec3_b) {.x = x.x <= y,.y = x.y <= y,.z = x.z <= y}; }
+internal vec3_b leq_3f32(vec3_f32 x, vec3_f32 y) { return (vec3_b) {.x = x.x <= y.x,.y = x.y <= y.y,.z = x.z <= y.z}; }
+internal vec3_b lt_3f32_f32(vec3_f32 x, f32 y)   { return (vec3_b) {.x = x.x < y,.y = x.y < y,.z = x.z < y}; }
+internal vec3_b lt_3f32(vec3_f32 x, vec3_f32 y)  { return (vec3_b) {.x = x.x < y.x,.y = x.y < y.y,.z = x.z < y.z}; }
+internal vec3_b gt_3f32_f32(vec3_f32 x, f32 y)   { return (vec3_b) {.x = x.x > y,.y = x.y > y,.z = x.z > y}; }
+internal vec3_b gt_3f32(vec3_f32 x, vec3_f32 y)  { return (vec3_b) {.x = x.x > y.x,.y = x.y > y.y,.z = x.z > y.z}; }
+internal vec3_b geq_3f32_f32(vec3_f32 x, f32 y)  { return (vec3_b) {.x = x.x >= y,.y = x.y >= y,.z = x.z >= y}; }
+internal vec3_b geq_3f32(vec3_f32 x, vec3_f32 y) { return (vec3_b) {.x = x.x >= y.x,.y = x.y >= y.y,.z = x.z >= y.z}; }
+internal vec3_b eq_3f32_f32(vec3_f32 x, f32 y)   { return (vec3_b) {.x = x.x == y,.y = x.y == y,.z = x.z == y}; }
+internal vec3_b eq_3f32(vec3_f32 x, vec3_f32 y)  { return (vec3_b) {.x = x.x == y.x,.y = x.y == y.y,.z = x.z == y.z}; }
+internal vec3_b neq_3f32_f32(vec3_f32 x, f32 y)  { return (vec3_b) {.x = x.x != y,.y = x.y != y,.z = x.z != y}; }
+internal vec3_b neq_3f32(vec3_f32 x, vec3_f32 y) { return (vec3_b) {.x = x.x != y.x,.y = x.y != y.y,.z = x.z != y.z}; }
+internal vec3_b is_nan_3f32(vec3_f32 x)          { return (vec3_b) {.x = isnan(x.x),.y = isnan(x.y),.z = isnan(x.z)}; }
+internal vec3_b is_inf_3f32(vec3_f32 x)          { return (vec3_b) {.x = isinf(x.x),.y = isinf(x.y),.z = isinf(x.z)}; }
+
+internal vec3_b not_3b(vec3_f32 x)               { return (vec3_b) {.x = !x.x,.y = !x.y,.z = !x.z}; }
+internal bool   all_3b(vec3_b x)                 { return x.x && x.y && x.z; }
+internal bool   any_3b(vec3_b x)                 { return x.x || x.y || x.z; }
 
 internal vec4_f32 make_angle_axis_quat(f64 t, vec3_f32 a)                     { return make_cos_axis_quat((f32)cos_f64(t/2.), a); }
 internal vec4_f32 make_cos_axis_quat(f32 ct, vec3_f32 a)                      { f32 st = sqrt_f32(1 - ct*ct); return (vec4_f32) {.x = st*a.x,.y = st*a.y,.z = st*a.z,.w = ct}; }
