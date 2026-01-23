@@ -4,6 +4,7 @@ import struct
 import numpy as np
 from mathutils import Vector
 from bpy.props import StringProperty
+import math
 
 # ============================================================
 # CONFIG
@@ -33,6 +34,15 @@ def to_blender(v):
     # Y -> Z
     # Z -> -Y (so into the screen becomes forward)
     return (x, -z, y)
+
+def to_blender_size(v):
+    """Convert from (Y up, X right, Z forward) to Blender coords (Z up)."""
+    x, y, z = v
+    # Mapping:
+    # X -> X
+    # Y -> Z
+    # Z -> -Y (so into the screen becomes forward)
+    return (x, z, y)
 
 # ============================================================
 # Scene properties for file picker
@@ -76,7 +86,7 @@ def load_ray_dump(path):
 # ============================================================
 # Draw rays (single mesh), separate hits and misses
 # ============================================================
-def draw_rays(origin, direction, t):
+def draw_rays(coll, origin, direction, t):
     verts_hit = []
     edges_hit = []
     verts_miss = []
@@ -99,22 +109,22 @@ def draw_rays(origin, direction, t):
 
     # --- Hit rays mesh ---
     if verts_hit:
-        mesh_hit = bpy.data.meshes.new("RayDump_Rays_Hit")
+        mesh_hit = bpy.data.meshes.new("Hit")
         mesh_hit.from_pydata(verts_hit, edges_hit, [])
         mesh_hit.update()
-        obj_hit = bpy.data.objects.new("RayDump_Rays_Hit", mesh_hit)
-        bpy.context.collection.objects.link(obj_hit)
+        obj_hit = bpy.data.objects.new("Hit", mesh_hit)
+        coll.objects.link(obj_hit)
         obj_hit.show_in_front = True
         obj_hit.color = RAY_COLOR
         obj_hit.display_type = 'WIRE'
 
     # --- Miss rays mesh ---
     if verts_miss:
-        mesh_miss = bpy.data.meshes.new("RayDump_Rays_Miss")
+        mesh_miss = bpy.data.meshes.new("Miss")
         mesh_miss.from_pydata(verts_miss, edges_miss, [])
         mesh_miss.update()
-        obj_miss = bpy.data.objects.new("RayDump_Rays_Miss", mesh_miss)
-        bpy.context.collection.objects.link(obj_miss)
+        obj_miss = bpy.data.objects.new("Miss", mesh_miss)
+        coll.objects.link(obj_miss)
         obj_miss.show_in_front = True
         obj_miss.color = MISS_COLOR
         obj_miss.display_type = 'WIRE'
@@ -122,13 +132,13 @@ def draw_rays(origin, direction, t):
 # ============================================================
 # Draw hit points (batched)
 # ============================================================
-def draw_hit_points(hit_p):
+def draw_hit_points(coll, hit_p):
     verts = [Vector(to_blender(p)) for p in hit_p]  # --- TRANSFORM ---
-    mesh = bpy.data.meshes.new("RayDump_Hits")
+    mesh = bpy.data.meshes.new("Points")
     mesh.from_pydata(verts, [], [])
     mesh.update()
-    obj = bpy.data.objects.new("RayDump_Hits", mesh)
-    bpy.context.collection.objects.link(obj)
+    obj = bpy.data.objects.new("Points", mesh)
+    coll.objects.link(obj)
     obj.show_in_front = True
     obj.color = HIT_COLOR
     obj.display_type = 'WIRE'
@@ -138,103 +148,191 @@ def draw_hit_points(hit_p):
 # BVH helpers (using instanced empties to avoid clipping)
 # ============================================================
 class Node:
-    def __init__(self, min_pt, max_pt):
+    def __init__(self, min_pt, max_pt, node_id):
+        self.id = node_id
         self.min = min_pt
         self.max = max_pt
         self.left = None
         self.right = None
 
-def parse_node(lines, idx):
-    line = lines[idx]
-    idx += 1
-    if line == "NULL":
-        return None, idx
-    parts = line.split()
-    assert parts[0] == "NODE"
-    min_pt = tuple(map(float, parts[2:5]))
-    max_pt = tuple(map(float, parts[5:8]))
-    node = Node(min_pt, max_pt)
-    node.left, idx = parse_node(lines, idx)
-    node.right, idx = parse_node(lines, idx)
-    return node, idx
-
-def create_wire_cube_solid(min_pt, max_pt, depth=0, name="Cube", inflation=0.001):
+def draw_bvh(path, use_collections=True, min_size=0.0001):
     """
-    Create a cube mesh from absolute coordinates (min_pt, max_pt) with tiny inflation per depth.
-    Apply Wireframe modifier to show as wireframe.
+    Stream-load a BVH binary file and draw in Blender.
+    Supports:
+        - Flat mode: one mesh per depth layer
+        - Collection mode: subtree collections for toggling
     """
-    # Inflate slightly to reduce Z-fighting
-    min_pt = Vector(min_pt) - Vector((depth*inflation, depth*inflation, depth*inflation))
-    max_pt = Vector(max_pt) + Vector((depth*inflation, depth*inflation, depth*inflation))
-    
-    x0, y0, z0 = min_pt
-    x1, y1, z1 = max_pt
 
-    # Vertices of the cube
-    verts = [
-        (x0, y0, z0),  # 0
-        (x1, y0, z0),  # 1
-        (x1, y1, z0),  # 2
-        (x0, y1, z0),  # 3
-        (x0, y0, z1),  # 4
-        (x1, y0, z1),  # 5
-        (x1, y1, z1),  # 6
-        (x0, y1, z1),  # 7
+    base_verts = [
+        (-0.5, -0.5, -0.5),
+        ( 0.5, -0.5, -0.5),
+        ( 0.5,  0.5, -0.5),
+        (-0.5,  0.5, -0.5),
+        (-0.5, -0.5,  0.5),
+        ( 0.5, -0.5,  0.5),
+        ( 0.5,  0.5,  0.5),
+        (-0.5,  0.5,  0.5),
     ]
 
-    # Faces of the cube (Blender needs quads)
-    faces = [
-        (0, 1, 2, 3),  # bottom
-        (4, 5, 6, 7),  # top
-        (0, 1, 5, 4),  # front
-        (1, 2, 6, 5),  # right
-        (2, 3, 7, 6),  # back
-        (3, 0, 4, 7),  # left
+    base_edges = [
+        (0,1),(1,2),(2,3),(3,0),
+        (4,5),(5,6),(6,7),(7,4),
+        (0,4),(1,5),(2,6),(3,7),
     ]
-    
-    # Create mesh and object
-    mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(verts, [], faces)  # edges can be empty
-    mesh.update()
-    
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
-    
-    # Wireframe modifier
-    mod = obj.modifiers.new("Wireframe", type='WIREFRAME')
-    mod.thickness = 0.005
-    mod.use_replace = True
-    
-    obj.show_in_front = True
-    
-    # Optional material/color
-    mat = bpy.data.materials.new(name + "_Mat")
-    mat.diffuse_color = (0.0, 0.5, 1.0, 1.0)
-    obj.data.materials.append(mat)
-    
-    return obj
 
-def draw_tree(node, parent_coll=None, depth=0):
-    if not node:
+    # Blender root collection
+    scene_coll = bpy.context.scene.collection
+    root_coll = bpy.data.collections.new("BVH")
+    scene_coll.children.link(root_coll)
+
+    # Shared wire mesh for collection mode
+    def get_shared_mesh():
+        name = "BVH_WireCube"
+        mesh = bpy.data.meshes.get(name)
+        if mesh:
+            return mesh
+        mesh = bpy.data.meshes.new(name)
+        mesh.from_pydata(base_verts, base_edges, [])
+        mesh.update()
+        return mesh
+
+    shared_mesh = get_shared_mesh()
+
+    def clamp_size(size):
+        return Vector(tuple(max(x, min_size) for x in size))
+    
+    def sanitize_point(p, max_abs=1e6):
+        return tuple(
+            max(min(coord, max_abs), -max_abs) if not math.isnan(coord) else 0.0
+            for coord in p
+        )
+
+    # ----------------------------
+    # Flat mode: one object per depth
+    # ----------------------------
+    if not use_collections:
+        layer_data = {}  # depth -> (verts, edges)
+        max_depth = 0
+
+        # First pass: compute max depth for progress bar
+        def compute_max_depth(f, depth=0):
+            nonlocal max_depth
+            b = f.read(1)
+            if not b:
+                return
+            if b == b'\x00':
+                return
+            f.read(32)  # id+min+max
+            if depth > max_depth:
+                max_depth = depth
+            compute_max_depth(f, depth+1)
+            compute_max_depth(f, depth+1)
+
+        # Open file twice: first to get max depth, second to stream draw
+        with open(path, 'rb') as f:
+            compute_max_depth(f)
+        wm = bpy.context.window_manager
+        wm.progress_begin(0, max_depth+1)
+
+        # Streaming parse and add to per-layer mesh
+        def add_cube_to_layer(min_pt, max_pt, depth):
+            min = Vector(min_pt)
+            max = Vector(max_pt)
+            center = (min + max) * 0.5
+            size = max - min
+            verts, edges = layer_data.setdefault(depth, ([], []))
+            v_offset = len(verts)
+            for v in base_verts:
+                verts.append(to_blender((
+                    center.x + v[0]*size.x,
+                    center.y + v[1]*size.y,
+                    center.z + v[2]*size.z
+                )))
+            for e in base_edges:
+                edges.append((e[0]+v_offset, e[1]+v_offset))
+
+        def parse_node_stream(f, depth=0):
+            b = f.read(1)
+            if not b:
+                return
+            if b == b'\x00':
+                return
+            
+            node_id = struct.unpack('<Q', f.read(8))[0]
+            min_pt = struct.unpack('<3f', f.read(12))
+            max_pt = struct.unpack('<3f', f.read(12))
+
+            add_cube_to_layer(min_pt, max_pt, depth)
+            parse_node_stream(f, depth+1)
+            parse_node_stream(f, depth+1)
+
+        with open(path, 'rb') as f:
+            parse_node_stream(f)
+
+        # Create one object per depth layer
+        for depth, (verts, edges) in layer_data.items():
+            mesh = bpy.data.meshes.new(f"Layer {depth}")
+            mesh.from_pydata(verts, edges, [])
+            mesh.update()
+
+            obj = bpy.data.objects.new(f"Layer {depth}", mesh)
+            obj.display_type = 'WIRE'
+            obj.show_in_front = True
+            obj.hide_render = True
+            obj.hide_select = True
+            root_coll.objects.link(obj)
+
+            wm.progress_update(depth+1)
+
+        wm.progress_end()
         return
 
-    # --- Create solid cube with wireframe ---
-    cube_obj = create_wire_cube_solid(to_blender(node.min), to_blender(node.max), depth, name=f"BVH_Node_{depth}")
+    # ----------------------------
+    # Collection mode: subtree toggling
+    # ----------------------------
+    def parse_node_collection(f, parent_collection, depth=0):
+        b = f.read(1)
+        if not b:
+            return
+        if b == b'\x00':
+            return
+        
+        node_id = struct.unpack('<Q', f.read(8))[0]
+        min_pt = struct.unpack('<3f', f.read(12))
+        max_pt = struct.unpack('<3f', f.read(12))
 
-    # --- Create collection for this node ---
-    coll_name = f"BVH_Node_Collection_{depth}"
-    coll = bpy.data.collections.new(coll_name)
-    coll.objects.link(cube_obj)
+        # Create collection if branching
+        left_peek = f.peek(1)[:1]
+        right_peek = None
+        left = None
+        right = None
+        if left_peek != b'\x00':
+            current_coll = bpy.data.collections.new(f"BVH_Node_{node_id}")
+            parent_collection.children.link(current_coll)
+        else:
+            current_coll = parent_collection
 
-    # Link to parent collection or scene
-    if parent_coll:
-        parent_coll.children.link(coll)
-    else:
-        bpy.context.scene.collection.children.link(coll)
+        # Draw node
+        min_v = Vector(min_pt)
+        max_v = Vector(max_pt)
+        center = to_blender((min_v + max_v) * 0.5)
+        size = to_blender_size(max_v - min_v)
+        obj = bpy.data.objects.new(f"BVH_Node_{node_id}", shared_mesh)
+        obj.location = center
+        obj.scale = size
+        obj.display_type = 'WIRE'
+        obj.show_in_front = True
+        obj.hide_render = True
+        obj.hide_select = True
+        current_coll.objects.link(obj)
 
-    # Recursive draw
-    draw_tree(node.left, coll, depth + 1)
-    draw_tree(node.right, coll, depth + 1)
+        # Recurse
+        parse_node_collection(f, current_coll, depth+1)
+        parse_node_collection(f, current_coll, depth+1)
+
+    # Open file and parse into collections
+    with open(path, 'rb') as f:
+        parse_node_collection(f, root_coll, 0)
 
 # ============================================================
 # Operators
@@ -254,9 +352,14 @@ class RAYDUMP_OT_load(bpy.types.Operator):
             self.report({'ERROR'}, "Failed to load ray dump")
             return {'CANCELLED'}
         origin, direction, hit_p, t = data
-        draw_rays(origin, direction, t)
+
+        scene_coll = bpy.context.scene.collection
+        root_coll = bpy.data.collections.new("Rays")
+        scene_coll.children.link(root_coll)
+        
+        draw_rays(root_coll, origin, direction, t)
         if DRAW_HIT_POINTS:
-            draw_hit_points(hit_p)
+            draw_hit_points(root_coll, hit_p)
         self.report({'INFO'}, f"Loaded {len(origin)} rays")
         return {'FINISHED'}
 
@@ -270,13 +373,7 @@ class BVH_OT_load(bpy.types.Operator):
         if not path:
             self.report({'ERROR'}, "No BVH path set")
             return {'CANCELLED'}
-        with open(path, "r") as f:
-            lines = [l.strip() for l in f if l.strip()]
-        if not lines[0].startswith("LBVH"):
-            self.report({'ERROR'}, "BVH file must start with LBVH")
-            return {'CANCELLED'}
-        root, _ = parse_node(lines, 1)
-        draw_tree(root)
+        draw_bvh(path, scene.bvh_use_collections)
         self.report({'INFO'}, "BVH loaded")
         return {'FINISHED'}
 
@@ -295,7 +392,11 @@ class RAYDUMP_PT_panel(bpy.types.Panel):
         scene = context.scene
         layout.prop(scene, "ray_dump_path")
         layout.operator("raydump.load", text="Load Rays")
+
+        layout.separator()
+
         layout.prop(scene, "bvh_path")
+        layout.prop(scene, "bvh_use_collections")
         layout.operator("bvh.load", text="Load BVH")
 
 # ============================================================
@@ -307,6 +408,12 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
+    bpy.types.Scene.bvh_use_collections = bpy.props.BoolProperty(
+        name="BVH Collections",
+        description="Create collections per BVH subtree (slower, allows subtree toggling)",
+        default=True
+    )
+
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
@@ -314,6 +421,8 @@ def unregister():
         del bpy.types.Scene.ray_dump_path
     if hasattr(bpy.types.Scene, "bvh_path"):
         del bpy.types.Scene.bvh_path
+
+    del bpy.types.Scene.bvh_use_collections
 
 if __name__ == "__main__":
     register()
