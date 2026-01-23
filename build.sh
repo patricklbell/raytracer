@@ -27,6 +27,7 @@ Targets:
   spheres         Build spheres demo
   tri             Build tri demo
   cornell         Build Cornell box demo
+  bunny           Build stanford bunny demo
 
 Environment variables:
   CC              C compiler to use (default: g++)
@@ -65,6 +66,7 @@ build_all_demos() {
     build_single_file spheres
     build_single_file tri
     build_single_file cornell
+    build_single_file bunny
 }
 
 main() {
@@ -102,6 +104,7 @@ main() {
             spheres)       build_single_file spheres;;
             tri)           build_single_file tri;;
             cornell)       build_single_file cornell;;
+            bunny)         build_single_file bunny;;
             "")            echo "Error: No command specified"
                            echo "Try '$SCRIPT_NAME --help' for more information."
                            exit 1;;

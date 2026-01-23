@@ -61,6 +61,7 @@ if "%all%"=="1"                 set didbuild=1 && call :build_all_demos || exit 
 if "%spheres%"=="1"             set didbuild=1 && call :build_demo spheres || exit /b 1
 if "%tri%"=="1"                 set didbuild=1 && call :build_demo tri || exit /b 1
 if "%cornell%"=="1"             set didbuild=1 && call :build_demo cornell || exit /b 1
+if "%bunny%"=="1"               set didbuild=1 && call :build_demo bunny || exit /b 1
 
 if "%didbuild%"=="" (
   echo Error: No valid target specified
@@ -75,6 +76,7 @@ goto :eof
   call :build_demo spheres
   call :build_demo tri
   call :build_demo cornell
+  call :build_demo bunny
 exit /b 0
 
 :build_demo
