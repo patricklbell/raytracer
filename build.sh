@@ -4,7 +4,6 @@ set -e
 CC=${CC:-g++}
 CFLAGS="${CFLAGS} -x c++ -I src -Wno-writable-strings -Wno-write-strings"
 LDFLAGS="${LDFLAGS} -lm"
-LDFLAGS_GFX="-lX11 -lXext"
 
 BUILD_DIR="build"
 BUILD_EXT=""
@@ -57,7 +56,7 @@ build_single_file() {
     local demo_name="$1"
     local main_file="src/demos/${demo_name}/main.c"
     
-    build_command="${CC} ${CFLAGS} ${main_file} ${LDFLAGS} ${LDFLAGS_GFX} -o ${BUILD_DIR}/${demo_name}${BUILD_EXT}"
+    build_command="${CC} ${CFLAGS} ${main_file} ${LDFLAGS} -o ${BUILD_DIR}/${demo_name}${BUILD_EXT}"
     echo "${build_command}"
     eval ${build_command}
 }

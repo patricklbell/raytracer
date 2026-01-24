@@ -15,7 +15,7 @@ struct LBVH_Tree {
 
 typedef bool (*LBVH_RayHitFunction)(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_interval, void* data);
 
-internal LBVH_Tree bvh_make(Arena* arena, rng3_f32* in_aabbs, u64 count);
+internal LBVH_Tree lbvh_make(Arena* arena, rng3_f32* in_aabbs, u64 count);
 internal u64       lbvh_query_ray(const LBVH_Tree* lbvh, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data);
 
 #ifdef BUILD_DEBUG
