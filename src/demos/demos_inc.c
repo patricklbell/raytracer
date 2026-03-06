@@ -4,6 +4,7 @@
 #include "mesh/mesh.c"
 #include "lbvh/lbvh.c"
 #include "raytracer/raytracer_inc.c"
+#include "third_party/tracy/public/tracy/Tracy.hpp"
 
 int main(int argc, char** argv) {
     ThreadCtx main_ctx;
@@ -98,6 +99,7 @@ int main(int argc, char** argv) {
 
     // call demo hook
     render(&settings);
+
     return 0;
 }
 

@@ -1,10 +1,15 @@
+#include "lbvh/lbvh.h"
+#include "common/common_arena.h"
+#include "common/common_math.h"
+#include "geo/geo.h"
+#include "third_party/tracy/public/tracy/Tracy.hpp"
 #ifdef BUILD_DEBUG
     #include "extra/dump.c"
 #endif
 
 struct NodeIndex {
     u64 morton_code;
-    u64 id;
+    u32 id;
 };
 
 RSFORCEINLINE int lbvh_morton_code_is_before(void* elementa, void* elementb) {
@@ -12,7 +17,7 @@ RSFORCEINLINE int lbvh_morton_code_is_before(void* elementa, void* elementb) {
 }
 
 // @note assumes morton codes are sorted smallest to largest
-static u64 lbvh_get_split_idx(const NodeIndex* in_node_index, u64 count) {
+static u32 lbvh_get_split_idx(const NodeIndex* in_node_index, u32 count) {
     Assert(count > 1);
 
     const u64 f = in_node_index[0].morton_code;
@@ -22,14 +27,14 @@ static u64 lbvh_get_split_idx(const NodeIndex* in_node_index, u64 count) {
     if (f == l) {
         return count/2;
     }
-    const u64 split_bit_idx = 63 - count_leading_zeros_u64(f ^ l);
+    const u32 split_bit_idx = 63 - count_leading_zeros_u64(f ^ l);
     const u64 split_bit = (1ull << split_bit_idx);
 
     // binary search for split point
-    u64 lo = 0;
-    u64 hi = count;
+    u32 lo = 0;
+    u32 hi = count;
     while (lo < hi) {
-        u64 mid = (lo + hi)/2;
+        u32 mid = (lo + hi)/2;
 
         if (in_node_index[mid].morton_code & split_bit) {
             hi = mid;
@@ -42,7 +47,7 @@ static u64 lbvh_get_split_idx(const NodeIndex* in_node_index, u64 count) {
 }
 
 static LBVH_Node* lbvh_create_subtree(
-    Arena* arena, const NodeIndex* in_node_index, const rng3_f32* in_aabbs, u64 start, u64 count
+    Arena* arena, const NodeIndex* in_node_index, const rng3_f32* in_aabbs, u32 start, u32 count
     BUILD_DEBUG_X(, vec3_f32 min, vec3_f32 max)
 ) {
     LBVH_Node* node = push_array(arena, LBVH_Node, 1);
@@ -89,7 +94,7 @@ static u64 lbvh_c_to_morton_code(vec3_f32 c, vec3_f32 min, vec3_f32 extents) {
     return morton_code;
 }
 
-internal LBVH_Tree lbvh_make(Arena* arena, rng3_f32* in_aabbs, u64 count) {    
+internal LBVH_Tree lbvh_make(Arena* arena, rng3_f32* in_aabbs, u32 count) {ZoneScoped;    
     // determine min and extents of centers
     Assert(count > 0);
     vec3_f32 min = make_scale_3f32(MAX_F32), max = make_scale_3f32(-MAX_F32);
@@ -117,49 +122,64 @@ internal LBVH_Tree lbvh_make(Arena* arena, rng3_f32* in_aabbs, u64 count) {
         }
 
         // build
-        radsort(node_index, count, lbvh_morton_code_is_before);
-        result.root = lbvh_create_subtree(arena, node_index, in_aabbs, 0, count BUILD_DEBUG_X(, min, max));
+        {
+            ZoneScopedN("sort");
+            radsort(node_index, count, lbvh_morton_code_is_before);
+        }
+        {
+            ZoneScopedN("tree");
+            result.root = lbvh_create_subtree(arena, node_index, in_aabbs, 0, count BUILD_DEBUG_X(, min, max));
+        }
     }}
 
     return result;
 }
 
-static bool lbvh_aabb_query_ray(rng3_f32 aabb, const rng3_f32* in_ray, rng_f32* inout_t_interval) {
-    rng_f32 overlap = *inout_t_interval;
+// internal LBVH_TreeFlat lbvh_make_flat(Arena* arena, rng3_f32* in_aabbs, u32 count) {
+//     LBVH_TreeFlat result;
+//     result.count = count;
+//     result.nodes = push_array(arena, LBVH_NodeFlat, result.count);
+//     result.root = 0;
 
-    for (int axis = 0; axis < 3; axis++) {
-        const f32 adinv = 1.f/in_ray->direction.v[axis];
+    
+// }
 
-        f32 t0 = (aabb.min.v[axis] - in_ray->origin.v[axis])*adinv;
-        f32 t1 = (aabb.max.v[axis] - in_ray->origin.v[axis])*adinv;
+static bool lbvh_aabb_query_ray(rng3_f32 aabb, const vec3_f32* in_ray_origin, const vec3_f32* in_ray_inv_dir, rng_f32* inout_t_interval) {ZoneScoped;
+    vec3_f32 t0 = elmul_3f32(sub_3f32(aabb.min, *in_ray_origin), *in_ray_inv_dir);
+    vec3_f32 t1 = elmul_3f32(sub_3f32(aabb.max, *in_ray_origin), *in_ray_inv_dir);
 
-        if (t0 < t1) {
-            if (t0 > overlap.min) overlap.min = t0;
-            if (t1 < overlap.max) overlap.max = t1;
-        } else {
-            if (t1 > overlap.min) overlap.min = t1;
-            if (t0 < overlap.max) overlap.max = t0;
-        }
-
-        if (overlap.max < overlap.min)
-            return false;
-    }
-
-    return true;
+    vec3_b neg = is_neg_3f32(*in_ray_inv_dir);
+    vec3_f32 t_min = {
+        .x = !neg.x ? t0.x : t1.x,
+        .y = !neg.y ? t0.y : t1.y,
+        .z = !neg.z ? t0.z : t1.z,
+    };
+    vec3_f32 t_max = {
+        .x = !neg.x ? t1.x : t0.x,
+        .y = !neg.y ? t1.y : t0.y,
+        .z = !neg.z ? t1.z : t0.z,
+    };
+    
+    rng_f32 overlap = {
+        .min = Max(Max(t_min.x, t_min.y), t_min.z),
+        .max = Min(Min(t_max.x, t_max.y), t_max.z),
+    };
+    
+    return overlap.min <= overlap.max && geo_in_interval(overlap.min, inout_t_interval);
 }
 
-static u64 lbvh_node_query_ray(const LBVH_Node* node, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
-    if (!lbvh_aabb_query_ray(node->aabb, in_ray, inout_t_interval))
+static u32 lbvh_node_query_ray(const LBVH_Node* node, const vec3_f32* in_ray_origin, const vec3_f32* in_ray_inv_dir, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {ZoneScoped;
+    if (!lbvh_aabb_query_ray(node->aabb, in_ray_origin, in_ray_inv_dir, inout_t_interval))
         return 0;
-    if (node->id > 0 && hit_function(node->id, in_ray, inout_t_interval, data))
+    if (node->id > 0 && hit_function(node->id, inout_t_interval, data))
         return node->id;
     
-    u64 left_id  = (node->left  == NULL) ? 0 : lbvh_node_query_ray(node->left, in_ray, inout_t_interval, hit_function, data);
-    u64 right_id = (node->right == NULL) ? 0 : lbvh_node_query_ray(node->right, in_ray, inout_t_interval, hit_function, data);
+    u32 left_id  = (node->left  == NULL) ? 0 : lbvh_node_query_ray(node->left, in_ray_origin, in_ray_inv_dir, inout_t_interval, hit_function, data);
+    u32 right_id = (node->right == NULL) ? 0 : lbvh_node_query_ray(node->right, in_ray_origin, in_ray_inv_dir, inout_t_interval, hit_function, data);
 
     return (right_id > 0) ? right_id : left_id;
 }
 
-internal u64 lbvh_query_ray(const LBVH_Tree* lbvh, const rng3_f32* in_ray, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
-    return lbvh_node_query_ray(lbvh->root, in_ray, inout_t_interval, hit_function, data);
+internal u32 lbvh_query_ray(const LBVH_Tree* lbvh, const vec3_f32* in_ray_origin, const vec3_f32* in_ray_inv_dir, rng_f32* inout_t_interval, LBVH_RayHitFunction hit_function, void* data) {
+    return lbvh_node_query_ray(lbvh->root, in_ray_origin, in_ray_inv_dir, inout_t_interval, hit_function, data);
 }

@@ -1,3 +1,8 @@
+#include "raytracer/cpu/raytracer_cpu.h"
+#include "common/common_core.h"
+#include "common/common_math.h"
+#include "third_party/tracy/public/tracy/Tracy.hpp"
+#include "tracing/tracing.h"
 #ifdef BUILD_DEBUG
     #include "extra/dump.c"
 #endif
@@ -54,7 +59,7 @@ rt_hook void rt_tracer_cast(RT_Handle handle, RT_CastSettings settings, vec3_f32
 static rng3_f32 rt_cpu_aabb_from_tri(vec3_f32 v0, vec3_f32 v1, vec3_f32 v2) {
     return make_rng3_f32(min_3f32(min_3f32(v0, v1), v2), max_3f32(max_3f32(v0, v1), v2));
 }
-static void rt_cpu_blas_node_from_mesh(RT_CPU_BLASNode* out_node, Arena* arena, const RT_Mesh* mesh) {
+static void rt_cpu_blas_node_from_mesh(RT_CPU_BLASNode* out_node, Arena* arena, const RT_Mesh* mesh) {ZoneScoped;
     out_node->mesh = mesh;
     out_node->auto_index = mesh->indices_count == 0;
     
@@ -87,7 +92,8 @@ static void rt_cpu_blas_node_from_mesh(RT_CPU_BLASNode* out_node, Arena* arena, 
             }
         }
 
-        out_node->lbvh = lbvh_make(arena, tri_aabbs, tris_count);
+        Assert(tris_count <= MAX_U32);
+        out_node->lbvh = lbvh_make(arena, tri_aabbs, (u32)tris_count);
 
     #if BUILD_DEBUG
         if (mesh->name.length > 0) {
@@ -98,7 +104,7 @@ static void rt_cpu_blas_node_from_mesh(RT_CPU_BLASNode* out_node, Arena* arena, 
     }}
 }
 
-internal void rt_cpu_build_blas(RT_CPU_BLAS* out_blas, Arena* arena, RT_World* world) {
+internal void rt_cpu_build_blas(RT_CPU_BLAS* out_blas, Arena* arena, RT_World* world) {ZoneScoped;
     RT_MeshList* meshes = &world->meshes;
 
     out_blas->node_count = meshes->length;
@@ -146,7 +152,7 @@ static rng3_f32 rt_cpu_tlas_node_to_aabb(const RT_CPU_TLASNode* in_tlas_node) {
     return (rng3_f32){};
 }
 
-internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CPU_BLAS* in_blas, RT_World* world) {
+internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CPU_BLAS* in_blas, RT_World* world) {ZoneScoped;
     RT_InstanceList* instances = &world->instances;
 
     out_tlas->node_count = instances->length;
@@ -176,7 +182,7 @@ internal void rt_cpu_build_tlas(RT_CPU_TLAS* out_tlas, Arena* arena, const RT_CP
 // ============================================================================
 // cpu kernels
 // ============================================================================
-internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {
+internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec3_f32* out_radiance, int width, int height) {ZoneScoped;
 #if BUILD_DEBUG
     rt_cpu_dump_begin_ray_hit_record("out.rays");
 #endif
@@ -186,7 +192,7 @@ internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec
     f32 inv_sample_count = 1.f/((f32)s->samples*s->samples);
 
     for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
+        for (int x = 0; x < width; x++) {ZoneScopedN("pixel");
             vec3_f32* c = &out_radiance[y*width + x];
             
             *c = zero_struct;
@@ -225,24 +231,26 @@ internal void rt_cpu_raygen(RT_CPU_Tracer* tracer, const RT_CastSettings* s, vec
                         );
                     }
 
-                    rng3_f32 ray = {
-                        .origin = origin,
-                        .direction = normalize_3f32(sub_3f32(sample, origin)),
-                    };
-        
+                    RT_CPU_Ray ray = rt_cpu_make_ray(origin, normalize_3f32(sub_3f32(sample, origin)));
                     RT_CPU_TraceContext ctx = zero_struct;
                     ctx.ior[0] = s->ior;
                     RT_CPU_HitRecord record;
-                    *c = add_3f32(*c, rt_cpu_trace_ray(tracer, &ctx, &ray, tracer->max_bounces, geo_make_pos_interval(), &record));
+
+                    {
+                        ZoneScopedN("sample");
+                        *c = add_3f32(*c, rt_cpu_trace_ray(tracer, &ctx, &ray, tracer->max_bounces, geo_make_pos_interval(), &record));
+                    }
                 }
             }
+
             *c = mul_3f32(*c, inv_sample_count);
+            FrameMark;
         }
     }
 }
 
-internal vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth, rng_f32 interval, RT_CPU_HitRecord* out_record) {
-    Assert(abs_f32(length2_3f32(in_ray->direction) - 1) < 0.001f);
+internal vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth, rng_f32 interval, RT_CPU_HitRecord* out_record) {ZoneScoped;
+    Assert(abs_f32(length2_3f32(in_ray->r.direction) - 1) < 0.001f);
 
     if (depth == 0) {
         return make_scale_3f32(0.f);
@@ -256,9 +264,9 @@ internal vec3_f32 rt_cpu_trace_ray(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* c
 
 #define RT_CPU_SURFACE_OFFSET 0.001f
 
-internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth, RT_CPU_HitRecord* in_record) {
+internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth, RT_CPU_HitRecord* in_record) {ZoneScoped;
 #if BUILD_DEBUG
-    rt_cpu_dump_add_ray_hit_record(in_ray, in_record, "out.rays");
+    rt_cpu_dump_add_ray_hit_record(&in_ray->r, in_record, "out.rays");
 #endif
 
     if (rt_is_zero_handle(in_record->material)) {
@@ -267,16 +275,16 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
 
     RT_Material* mat = &((RT_MaterialNode*)in_record->material.v64[0])->v;
 
-    if (mat->billboard && dot_3f32(in_record->n, in_ray->direction) > 0.f) {
+    if (mat->billboard && dot_3f32(in_record->n, in_ray->r.direction) > 0.f) {
         in_record->n = mul_3f32(in_record->n, -1.f);
     }
 
     switch (mat->type) {
         case RT_MaterialType_Lambertian:{
-            rng3_f32 s_ray = {
-                .origin = add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
-                .direction = rt_cpu_cosine_sample_hemisphere(in_record->n),
-            };
+            RT_CPU_Ray s_ray = rt_cpu_make_ray(
+                add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
+                rt_cpu_cosine_sample_hemisphere(in_record->n)
+            );
             
             RT_CPU_HitRecord r_record;
             vec3_f32 i_radiance = rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, geo_make_pos_interval(), &r_record);
@@ -291,7 +299,7 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
         case RT_MaterialType_Dieletric:{
             Assert(!mat->billboard);
 
-            f32 idotn = -dot_3f32(in_record->n, in_ray->direction);
+            f32 idotn = -dot_3f32(in_record->n, in_ray->r.direction);
             bool backface = idotn < 0.f;
             vec3_f32 n_corr = mul_3f32(in_record->n, backface ? -1.f : 1.f);
 
@@ -301,21 +309,18 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
             bool tir = sqrt_f32(1-idotn*idotn)*eta > 1.f;
             bool reflect = tir || rt_cpu_fresnel_schlick(eta_i, eta_t, abs_f32(idotn)) > rand_unit_f32();
 
-            rng3_f32 s_ray = *in_ray;
+            vec3_f32 origin, direction;
             if (reflect) {
-                s_ray = {
-                    .origin=add_3f32(in_record->p, mul_3f32(n_corr, RT_CPU_SURFACE_OFFSET)),
-                    .direction = reflect_3f32(in_ray->direction, n_corr),
-                };
+                origin=add_3f32(in_record->p, mul_3f32(n_corr, RT_CPU_SURFACE_OFFSET));
+                direction = reflect_3f32(in_ray->r.direction, n_corr);
             } else {
-                s_ray = {
-                    .origin=add_3f32(in_record->p, mul_3f32(n_corr, -RT_CPU_SURFACE_OFFSET)),
-                    .direction = refract_3f32(in_ray->direction, n_corr, eta),
-                };
+                origin=add_3f32(in_record->p, mul_3f32(n_corr, -RT_CPU_SURFACE_OFFSET));
+                direction = refract_3f32(in_ray->r.direction, n_corr, eta);
                 ctx->ior_count++;
                 ctx->ior[ctx->ior_count] = eta_t;
             }
 
+            RT_CPU_Ray s_ray = rt_cpu_make_ray(origin, direction);
             RT_CPU_HitRecord s_record;
             vec3_f32 s_radiance = rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, geo_make_pos_interval(), &s_record);
             vec3_f32 e_radiance = mat->emissive;
@@ -327,14 +332,15 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
             return add_3f32(s_radiance, e_radiance);
         }break;
         case RT_MaterialType_Metal:{
-            vec3_f32 i = reflect_3f32(in_ray->direction, in_record->n);
+            vec3_f32 i = reflect_3f32(in_ray->r.direction, in_record->n);
             // approximation of specular lobe
             i = add_3f32(i, mul_3f32(rand_unit_sphere_3f32(), mat->roughness));
 
-            rng3_f32 s_ray = {
-                .origin=add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
-                .direction=normalize_3f32(i),
-            };
+            
+            RT_CPU_Ray s_ray = rt_cpu_make_ray(  
+                add_3f32(in_record->p, mul_3f32(in_record->n, RT_CPU_SURFACE_OFFSET)),
+                normalize_3f32(i)
+            );
             RT_CPU_HitRecord i_record;
             
             return rt_cpu_trace_ray(tracer, ctx, &s_ray, depth-1, geo_make_pos_interval(), &i_record);
@@ -351,16 +357,16 @@ internal vec3_f32 rt_cpu_closest_hit(RT_CPU_Tracer* tracer, RT_CPU_TraceContext*
     return make_3f32(0,0,0);
 }
 
-internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const rng3_f32* in_ray, u8 depth) {
+internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, const RT_CPU_Ray* in_ray, u8 depth) {ZoneScoped;
 #if BUILD_DEBUG
-    rt_cpu_dump_add_ray_miss_record(in_ray, "out.rays");
+    rt_cpu_dump_add_ray_miss_record(&in_ray->r, "out.rays");
 #endif
 
     if (!tracer->sky) {
         return make_scale_3f32(0.f);
     }
 
-    f32 y = Clamp(in_ray->direction.y, 0.f, 1.f);
+    f32 y = Clamp(in_ray->r.direction.y, 0.f, 1.f);
     f32 t = pow_f32(y, 0.5f);
 
     vec3_f32 sky = lerp_3f32(make_3f32(1.f, 1.f, 1.f), make_3f32(0.5f, 0.7f, 1.f), t);
@@ -373,13 +379,13 @@ internal vec3_f32 rt_cpu_miss(RT_CPU_Tracer* tracer, RT_CPU_TraceContext* ctx, c
 // ============================================================================
 // intersection
 // ============================================================================
-static bool rt_cpu_tlas_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_interval, void* _data) {
+static bool rt_cpu_tlas_hit(u32 id, rng_f32* inout_t_interval, void* _data) {
     RT_CPU_TLASData* data = (RT_CPU_TLASData*)_data;
 
     Assert(id > 0 && id <= data->tlas->node_count);
     RT_CPU_TLASNode* node = &data->tlas->nodes[id-1];
 
-    return rt_cpu_intersect_tlas_node(node, in_ray, inout_t_interval, &data->hit_record);
+    return rt_cpu_intersect_tlas_node(node, data->ray, inout_t_interval, &data->hit_record);
 }
 
 static void rt_cpu_get_tri(const RT_CPU_BLASNode* blas_node, GEO_VertexAttributes attr, u32 idx, vec3_f32* out_0, vec3_f32* out_1, vec3_f32* out_2) {
@@ -399,22 +405,24 @@ static void rt_cpu_get_tri(const RT_CPU_BLASNode* blas_node, GEO_VertexAttribute
     }
 }
 
-internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {
+internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const RT_CPU_Ray* in_ray, rng_f32 interval, RT_CPU_HitRecord* out_record) {ZoneScoped;
     RT_CPU_TLASData tlas_data = {
+        .ray = in_ray,
         .hit_record = {},
         .tlas = &tracer->tlas,
     };
-    bool hit = lbvh_query_ray(&tracer->tlas.lbvh, in_ray, &interval, &rt_cpu_tlas_hit, (void*)&tlas_data);
+    bool hit = lbvh_query_ray(&tracer->tlas.lbvh, &in_ray->r.origin, &in_ray->inv_dir, &interval, &rt_cpu_tlas_hit, (void*)&tlas_data);
 
     // convert tlas hit record into hit record
     // (avoids costly calculations if multiple intersections occur)
     if (hit) {
+        ZoneScopedN("tlas to hit");
         RT_CPU_TLASHitRecord* hit_record = &tlas_data.hit_record;
         const RT_CPU_TLASNode* tlas_node = hit_record->tlas_node;
         const RT_Instance* instance = tlas_node->instance;
 
         out_record->t = interval.max;
-        out_record->p = add_3f32(in_ray->origin, mul_3f32(in_ray->direction, out_record->t));
+        out_record->p = add_3f32(in_ray->r.origin, mul_3f32(in_ray->r.direction, out_record->t));
         out_record->material = instance->material;
         
         // @todo flag on material showing which attributes are necessary for shading?
@@ -456,7 +464,7 @@ internal bool rt_cpu_intersect(RT_CPU_Tracer* tracer, const rng3_f32* in_ray, rn
     return hit;
 }
 
-static bool rt_cpu_blas_node_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_t_interval, void* _data) {
+static bool rt_cpu_blas_node_hit(u32 id, rng_f32* inout_t_interval, void* _data) {ZoneScoped;
     RT_CPU_BLASNodeData* data = (RT_CPU_BLASNodeData*)_data;
 
     Assert(data->mesh->primitive == GEO_Primitive_TRI_LIST); // @todo
@@ -464,25 +472,25 @@ static bool rt_cpu_blas_node_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_
     bool hit = false;
     if (data->auto_index) {
         Assert(id > 0 && id <= data->mesh->vertices_count/3);
-        u64 idx = (id - 1)*3;
+        u32 idx = (id - 1)*3;
 
         vec3_f32 v0 = *OffsetPtr(data->p_start, (idx+0)*data->p_stride, GEO_VertexType_P);
         vec3_f32 v1 = *OffsetPtr(data->p_start, (idx+1)*data->p_stride, GEO_VertexType_P);
         vec3_f32 v2 = *OffsetPtr(data->p_start, (idx+2)*data->p_stride, GEO_VertexType_P);
 
-        if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval, &data->hit_record.uv)) {
+        if (geo_intersect_tri(&data->ray->r, v0, v1, v2, inout_t_interval, &data->hit_record.uv)) {
             hit = true;
             data->hit_record.tri_idx = idx;
         }
     } else {
         Assert(id > 0 && id <= data->mesh->indices_count/3);
-        u64 idx = (id - 1)*3;
+        u32 idx = (id - 1)*3;
 
         vec3_f32 v0 = *OffsetPtr(data->p_start, (data->mesh->indices[idx+0])*data->p_stride, GEO_VertexType_P);
         vec3_f32 v1 = *OffsetPtr(data->p_start, (data->mesh->indices[idx+1])*data->p_stride, GEO_VertexType_P);
         vec3_f32 v2 = *OffsetPtr(data->p_start, (data->mesh->indices[idx+2])*data->p_stride, GEO_VertexType_P);
 
-        if (geo_intersect_tri(in_ray, v0, v1, v2, inout_t_interval, &data->hit_record.uv)) {
+        if (geo_intersect_tri(&data->ray->r, v0, v1, v2, inout_t_interval, &data->hit_record.uv)) {
             hit = true;
             data->hit_record.tri_idx = idx;
         }
@@ -491,14 +499,14 @@ static bool rt_cpu_blas_node_hit(u64 id, const rng3_f32* in_ray, rng_f32* inout_
     return hit;
 }
 
-internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const rng3_f32* in_ray, rng_f32* inout_t_interval, RT_CPU_TLASHitRecord* out_record) {
+internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const RT_CPU_Ray* in_ray, rng_f32* inout_t_interval, RT_CPU_TLASHitRecord* out_record) {ZoneScoped;
     const RT_Instance* instance = tlas_node->instance;
 
     bool hit = false;
     switch (instance->type) {
         case RT_InstanceType_Sphere:{
             const RT_SphereInstance* sphere_inst = &instance->sphere;
-            hit = geo_intersect_sphere(in_ray, sphere_inst->center, sphere_inst->radius, inout_t_interval);
+            hit = geo_intersect_sphere(&in_ray->r, sphere_inst->center, sphere_inst->radius, inout_t_interval);
         }break;
         case RT_InstanceType_Mesh:{
             const RT_MeshInstance* mesh_inst = &instance->mesh;
@@ -506,7 +514,9 @@ internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const
             const RT_Mesh* mesh = blas_node->mesh;
 
             RT_CPU_BLASNodeData blas_node_data = {
+                .ray = in_ray,
                 .hit_record = {},
+
                 .p_start = OffsetPtr(mesh->vertices, geo_vertex_offset(mesh->attrs, GEO_VertexAttributes_P), GEO_VertexType_P),
                 .p_stride = geo_vertex_stride(mesh->attrs, GEO_VertexAttributes_P),
                 .auto_index = blas_node->auto_index,
@@ -515,8 +525,9 @@ internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const
 
             // transform to local (model) space
             // @note direction of local ray is not normalized
-            rng3_f32 local_ray = rt_cpu_inv_transform_ray(*in_ray, mesh_inst->translation, mesh_inst->rotation, mesh_inst->scale);
-            hit = lbvh_query_ray(&blas_node->lbvh, &local_ray, inout_t_interval, &rt_cpu_blas_node_hit, (void*)&blas_node_data);
+            rng3_f32 local_ray = rt_cpu_inv_transform_ray(in_ray->r, mesh_inst->translation, mesh_inst->rotation, mesh_inst->scale);
+            vec3_f32 local_inv_dir = eldiv_3f32(make_scale_3f32(1.f), local_ray.direction);
+            hit = lbvh_query_ray(&blas_node->lbvh, &local_ray.origin, &local_inv_dir, inout_t_interval, &rt_cpu_blas_node_hit, (void*)&blas_node_data);
             if (hit) {
                 out_record->tri_idx = blas_node_data.hit_record.tri_idx;
                 out_record->uv = blas_node_data.hit_record.uv;
@@ -533,6 +544,16 @@ internal bool rt_cpu_intersect_tlas_node(const RT_CPU_TLASNode* tlas_node, const
 // ============================================================================
 // helpers
 // ============================================================================
+internal RT_CPU_Ray rt_cpu_make_ray(vec3_f32 origin, vec3_f32 direction) {
+    return {
+        .r = {
+            .origin = origin,
+            .direction = direction
+        },
+        .inv_dir = eldiv_3f32(make_scale_3f32(1.f), direction),
+    };
+}
+
 static vec3_f32 rt_cpu_transform_uvw_to_hemisphere(vec3_f32 s, vec3_f32 n) {
     // @perf
     vec3_f32 u_basis = orthogonal_3f32(n);

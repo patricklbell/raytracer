@@ -108,6 +108,7 @@ internal vec3_b eq_3f32_f32(vec3_f32 x, f32 y);
 internal vec3_b eq_3f32(vec3_f32 x, vec3_f32 y);
 internal vec3_b neq_3f32_f32(vec3_f32 x, f32 y);
 internal vec3_b neq_3f32(vec3_f32 x, vec3_f32 y);
+internal vec3_b is_neg_3f32(vec3_f32 x);
 internal vec3_b is_nan_3f32(vec3_f32 x);
 internal vec3_b is_inf_3f32(vec3_f32 x);
 

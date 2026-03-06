@@ -16,14 +16,18 @@ set clang_ex=clang
 set cl_ex=cl
 
 if not "%/msvc%"=="1" if not "%/clang%"=="1" set "/msvc=1"
-if not "%/release%"=="1" set "/debug=1"
-if "%/debug%"=="1"   set "/release=0"
-if "%/release%"=="1" set "/debug=0"
-if "%/msvc%"=="1"    set "/clang=0"
-if "%/clang%"=="1"   set "/msvc=0"
-if "%/clang++%"=="1" set "/msvc=0"
-if "%/clang++%"=="1" set "/clang=1"
-if "%/clang++%"=="1" set clang_ex=clang++ -x c++
+if not "%/release%"=="1" if not "%/relwithdebinfo%"=="1" set "/debug=1"
+if "%/relwithdebinfo%"=="1" set "/debug=0"
+if "%/relwithdebinfo%"=="1" set "/release=0"
+if "%/debug%"=="1"          set "/release=0"
+if "%/debug%"=="1"          set "/relwithdebinfo=0"
+if "%/release%"=="1"        set "/debug=0"
+if "%/release%"=="1"        set "/relwithdebinfo=0"
+if "%/msvc%"=="1"           set "/clang=0"
+if "%/clang%"=="1"          set "/msvc=0"
+if "%/clang++%"=="1"        set "/msvc=0"
+if "%/clang++%"=="1"        set "/clang=1"
+if "%/clang++%"=="1"        set clang_ex=clang++ -x c++
 
 set auto_compile_flags=
 if "%/trace%"=="1"     set auto_compile_flags=%auto_compile_flags% -DTRACY_ENABLE  src/third_party/tracy/public/TracyClient.cpp
@@ -31,23 +35,27 @@ if "%/trace%"=="1"     set auto_compile_flags=%auto_compile_flags% -DTRACY_ENABL
 set cl_common=/I "src" /nologo /FC /Fo"%build_dir%\\"
 set cl_debug=call %cl_ex%   /MDd /Od /Ob1 /Z7 /DBUILD_DEBUG=1 %cl_common% %auto_compile_flags%
 set cl_release=call %cl_ex% /MD  /O2          /DBUILD_DEBUG=0 %cl_common% %auto_compile_flags%
+set cl_relwithdebinfo=call %cl_ex% /MD /O2 /Z7 /DBUILD_DEBUG=1 %cl_common% %auto_compile_flags%
 set cl_link=/link /INCREMENTAL:NO /opt:ref /opt:icf /NOIMPLIB /NOEXP
 set cl_shared=/LD
 set cl_out=/out:
 set clang_common=-Isrc -D_CRT_SECURE_NO_WARNINGS -Wno-writable-strings
 set clang_debug=call %clang_ex% -g -O0 -DBUILD_DEBUG=1 -fno-omit-frame-pointer %clang_common% %auto_compile_flags%
 set clang_release=call %clang_ex%  -O3 -DBUILD_DEBUG=0 %clang_common% %auto_compile_flags%
+set clang_relwithdebinfo=call %clang_ex% -g -O2 -DBUILD_DEBUG=1 -fno-omit-frame-pointer %clang_common% %auto_compile_flags%
 set clang_link=
 set clang_shared=-shared
 set clang_out=-o
 
 if "%/msvc%"=="1"      set compile_debug=%cl_debug%
 if "%/msvc%"=="1"      set compile_release=%cl_release%
+if "%/msvc%"=="1"      set compile_relwithdebinfo=%cl_relwithdebinfo%
 if "%/msvc%"=="1"      set compile_link=%cl_link%
 if "%/msvc%"=="1"      set compile_shared=%cl_shared%
 if "%/msvc%"=="1"      set out=%cl_out%
 if "%/clang%"=="1"     set compile_debug=%clang_debug%
 if "%/clang%"=="1"     set compile_release=%clang_release%
+if "%/clang%"=="1"     set compile_relwithdebinfo=%clang_relwithdebinfo%
 if "%/clang%"=="1"     set compile_link=%clang_link%
 if "%/clang%"=="1"     set compile_shared=%clang_shared%
 if "%/clang%"=="1"     set out=%clang_out%
@@ -99,7 +107,9 @@ if "%msvc%"=="1" (
 ) else if "%clang%"=="1" (
   echo - Compiler:        clang
 )
-if "%release%"=="1" (
+if "%relwithdebinfo%"=="1" (
+  echo - Mode:            RelWithDebInfo
+) else if "%release%"=="1" (
   echo - Mode:            Release
 ) else (
   echo - Mode:            Debug
@@ -126,6 +136,7 @@ echo   /clang            Use Clang compiler
 echo   /clang++          Use Clang++ compiler (C++)
 echo   /debug            Debug build (default)
 echo   /release          Release build
+echo   /relwithdebinfo   RelWithDebInfo build
 echo   /trace            Enable Tracy profiling
 echo   /help             Show this help message
 echo.

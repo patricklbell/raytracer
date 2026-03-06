@@ -77,6 +77,7 @@ internal vec3_b neq_3f32_f32(vec3_f32 x, f32 y)  { return (vec3_b) {.x = x.x != 
 internal vec3_b neq_3f32(vec3_f32 x, vec3_f32 y) { return (vec3_b) {.x = x.x != y.x,.y = x.y != y.y,.z = x.z != y.z}; }
 internal vec3_b is_nan_3f32(vec3_f32 x)          { return (vec3_b) {.x = isnan(x.x),.y = isnan(x.y),.z = isnan(x.z)}; }
 internal vec3_b is_inf_3f32(vec3_f32 x)          { return (vec3_b) {.x = isinf(x.x),.y = isinf(x.y),.z = isinf(x.z)}; }
+internal vec3_b is_neg_3f32(vec3_f32 x)          { return (vec3_b) {.x = x.x < 0.f,.y = x.y < 0.f,.z = x.z < 0.f}; }
 
 internal vec3_b not_3b(vec3_f32 x)               { return (vec3_b) {.x = !x.x,.y = !x.y,.z = !x.z}; }
 internal bool   all_3b(vec3_b x)                 { return x.x && x.y && x.z; }

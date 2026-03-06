@@ -16,22 +16,23 @@ print_help() {
 Usage: $SCRIPT_NAME [OPTION]... [TARGETS]...
 
 Options:
-  --debug         Debug build (default)
-  --release       Release build
-  --trace         Enable Tracy profiling
-  --help          Display this help and exit
+  --debug          Debug build (default)
+  --release        Release build
+  --relwithdebinfo RelWithDebInfo build
+  --trace          Enable Tracy profiling
+  --help           Display this help and exit
 
 Targets:
-  all             Build all demos
-  spheres         Build spheres demo
-  tri             Build tri demo
-  cornell         Build Cornell box demo
-  bunny           Build stanford bunny demo
+  all              Build all demos
+  spheres          Build spheres demo
+  tri              Build tri demo
+  cornell          Build Cornell box demo
+  bunny            Build stanford bunny demo
 
 Environment variables:
-  CC              C compiler to use (default: g++)
-  CFLAGS          Additional compiler flags
-  LDFLAGS         Additional linker flags
+  CC               C compiler to use (default: g++)
+  CFLAGS           Additional compiler flags
+  LDFLAGS          Additional linker flags
 EOF
 }
 
@@ -40,6 +41,8 @@ print_info() {
     echo "- Compiler:        $CC"
     if [[ -n "$release" ]]; then
     echo "- Mode:            Release"
+    elif [[ -n "$relwithdebinfo" ]]; then
+    echo "- Mode:            RelWithDebInfo"
     else
     echo "- Mode:            Debug"
     fi
@@ -73,18 +76,21 @@ main() {
     actions=()
     for arg in "$@"; do
         case "$arg" in
-            --release)   release=1;;
-            --trace)     trace=1;;
-            --debug)     debug=1;;
-            --help)      print_help; exit 0;;
-            *)           actions+=("$arg");;
+            --release)          release=1;;
+            --trace)            trace=1;;
+            --debug)            debug=1;;
+            --relwithdebinfo)   relwithdebinfo=1;;
+            --help)             print_help; exit 0;;
+            *)                  actions+=("$arg");;
         esac
     done
-    if ! [[ -v release ]]; then debug=1; fi
+    if ! [[ -v release || -v relwithdebinfo ]]; then debug=1; fi
 
     # Handle build mode
     if [[ -v release ]]; then
         CFLAGS="${CFLAGS} -s -O3 -DBUILD_DEBUG=0"
+    elif [[ -v relwithdebinfo ]]; then
+        CFLAGS="${CFLAGS} -g -O2 -DBUILD_DEBUG=1 -fno-omit-frame-pointer"
     elif [[ -v debug ]]; then
         CFLAGS="${CFLAGS} -g -O0 -DBUILD_DEBUG=1 -fno-omit-frame-pointer"
     fi

@@ -1,4 +1,5 @@
 // helpers
+#include "third_party/tracy/public/tracy/Tracy.hpp"
 internal b32 ms_hash_is_eq(MS_VertexMapHash a, MS_VertexMapHash b) {
     for EachElement(i, a.indices) {
         if (a.indices[i] != b.indices[i]) {
@@ -70,7 +71,7 @@ internal void* ms_vertex_map_data(Arena* arena, MS_VertexMap* map, vec3_f32* pos
 }
 
 // loaders
-internal MS_LoadResult ms_load_obj(Arena* arena, NTString8 path, MS_LoadSettings settings) {
+internal MS_LoadResult ms_load_obj(Arena* arena, NTString8 path, MS_LoadSettings settings) {ZoneScoped;
     OS_Handle file = os_open_readonly_file(path);
 
     if (os_is_handle_zero(file)) {
