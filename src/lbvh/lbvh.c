@@ -135,15 +135,6 @@ internal LBVH_Tree lbvh_make(Arena* arena, rng3_f32* in_aabbs, u32 count) {ZoneS
     return result;
 }
 
-// internal LBVH_TreeFlat lbvh_make_flat(Arena* arena, rng3_f32* in_aabbs, u32 count) {
-//     LBVH_TreeFlat result;
-//     result.count = count;
-//     result.nodes = push_array(arena, LBVH_NodeFlat, result.count);
-//     result.root = 0;
-
-    
-// }
-
 static bool lbvh_aabb_query_ray(rng3_f32 aabb, const vec3_f32* in_ray_origin, const vec3_f32* in_ray_inv_dir, rng_f32* inout_t_interval) {ZoneScoped;
     vec3_f32 t0 = elmul_3f32(sub_3f32(aabb.min, *in_ray_origin), *in_ray_inv_dir);
     vec3_f32 t1 = elmul_3f32(sub_3f32(aabb.max, *in_ray_origin), *in_ray_inv_dir);

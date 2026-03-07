@@ -30,20 +30,24 @@ if "%/clang++%"=="1"        set "/clang=1"
 if "%/clang++%"=="1"        set clang_ex=clang++ -x c++
 
 set auto_compile_flags=
-if "%/trace%"=="1"     set auto_compile_flags=%auto_compile_flags% -DTRACY_ENABLE  src/third_party/tracy/public/TracyClient.cpp
+if "%/trace%"=="1"     set auto_compile_flags=%auto_compile_flags% -DTRACY_ENABLE -DTRACY_DELAYED_INIT src/third_party/tracy/public/TracyClient.cpp
+if "%/vulkan%"=="1"    set auto_compile_flags=%auto_compile_flags% -DVULKAN_ENABLED /I"%VULKAN_SDK%\include"
 
 set cl_common=/I "src" /nologo /FC /Fo"%build_dir%\\"
 set cl_debug=call %cl_ex%   /MDd /Od /Ob1 /Z7 /DBUILD_DEBUG=1 %cl_common% %auto_compile_flags%
 set cl_release=call %cl_ex% /MD  /O2          /DBUILD_DEBUG=0 %cl_common% %auto_compile_flags%
 set cl_relwithdebinfo=call %cl_ex% /MD /O2 /Z7 /DBUILD_DEBUG=1 %cl_common% %auto_compile_flags%
 set cl_link=/link /INCREMENTAL:NO /opt:ref /opt:icf /NOIMPLIB /NOEXP
+if "%/vulkan%"=="1"    set cl_link=%cl_link% "%VULKAN_SDK%\lib\vulkan-1.lib"
 set cl_shared=/LD
 set cl_out=/out:
 set clang_common=-Isrc -D_CRT_SECURE_NO_WARNINGS -Wno-writable-strings
+if "%/vulkan%"=="1"    set clang_common=%clang_common% -DVULKAN_ENABLED -I"%VULKAN_SDK%/include"
 set clang_debug=call %clang_ex% -g -O0 -DBUILD_DEBUG=1 -fno-omit-frame-pointer %clang_common% %auto_compile_flags%
 set clang_release=call %clang_ex%  -O3 -DBUILD_DEBUG=0 %clang_common% %auto_compile_flags%
 set clang_relwithdebinfo=call %clang_ex% -g -O2 -DBUILD_DEBUG=1 -fno-omit-frame-pointer %clang_common% %auto_compile_flags%
 set clang_link=
+if "%/vulkan%"=="1"    set clang_link=%clang_link% -L"%VULKAN_SDK%/lib" -lvulkan
 set clang_shared=-shared
 set clang_out=-o
 
@@ -65,6 +69,15 @@ if "%/release%"=="1"   set compile=%compile_release%
 call :print_info
 
 if not exist %build_dir% mkdir %build_dir%
+
+if "%/vulkan%"=="1" (
+  if not exist %build_dir%\shaders mkdir %build_dir%\shaders
+  glslc --target-env=vulkan1.3 -fshader-stage=rgen  src\raytracer\vulkan\shaders\rgen.glsl  -o %build_dir%\shaders\rgen.spv  || exit /b 1
+  glslc --target-env=vulkan1.3 -fshader-stage=rchit src\raytracer\vulkan\shaders\rchit.glsl -o %build_dir%\shaders\rchit.spv || exit /b 1
+  glslc --target-env=vulkan1.3 -fshader-stage=rmiss src\raytracer\vulkan\shaders\rmiss.glsl -o %build_dir%\shaders\rmiss.spv || exit /b 1
+  echo - Shaders compiled to %build_dir%\shaders\
+)
+
 if "%all%"=="1"                 set didbuild=1 && call :build_all_demos || exit /b 1
 if "%spheres%"=="1"             set didbuild=1 && call :build_demo spheres || exit /b 1
 if "%tri%"=="1"                 set didbuild=1 && call :build_demo tri || exit /b 1
@@ -119,6 +132,9 @@ if "%trace%"=="1" (
 ) else (
   echo - Tracy:           Disabled
 )
+if "%/vulkan%"=="1" (
+  echo - Vulkan:          Enabled
+)
 endlocal
 exit /b 0
 
@@ -137,6 +153,7 @@ echo   /clang++          Use Clang++ compiler (C++)
 echo   /debug            Debug build (default)
 echo   /release          Release build
 echo   /relwithdebinfo   RelWithDebInfo build
+echo   /vulkan           Enable Vulkan support
 echo   /trace            Enable Tracy profiling
 echo   /help             Show this help message
 echo.

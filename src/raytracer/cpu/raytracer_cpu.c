@@ -1,12 +1,10 @@
-#include "raytracer/cpu/raytracer_cpu.h"
-#include "common/common_core.h"
-#include "common/common_math.h"
-#include "third_party/tracy/public/tracy/Tracy.hpp"
-#include "tracing/tracing.h"
 #ifdef BUILD_DEBUG
     #include "extra/dump.c"
 #endif
 
+// ============================================================================
+// tracer
+// ============================================================================
 internal RT_CPU_Tracer* rt_cpu_handle_to_tracer(RT_Handle handle) {
     return (RT_CPU_Tracer*)handle.v64[0];
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common/common_math.h"
 typedef struct RT_CPU_HitRecord RT_CPU_HitRecord;
 struct RT_CPU_HitRecord {
     vec3_f32 p;

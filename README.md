@@ -7,10 +7,18 @@
 No special CPU instructions are required.
 
 ## Compiling
-The build is managed through the `build.bat` script on Windows and the `build.sh` script on Linux, refer to the respective help messages for usage instructions. 
+The build is managed through the `build.bat` script on Windows and the `build.sh` script on Linux, refer to the respective help messages for usage instructions.
 - Cross-compiles as C and C++
 - MSVC/gcc/g++/clang/clang++ recent enough to support C11
 - Only depends on libc, libm and a few core OS APIs
+
+### Optional dependencies
+Vulkan support is optional. If you want to build with Vulkan (`--vulkan` or `/vulkan`):
+
+- **Linux**: Install the Vulkan SDK (e.g. from LunarG or your package manager). This provides the headers and `libvulkan.so`.
+- **Windows**: Install the Vulkan SDK from LunarG. This provides the headers and `vulkan-1.lib`.
+
+If the SDK is not installed, Vulkan builds will fail. For non-Vulkan builds, no additional dependencies are required.
 
 ### Windows
 Building on Windows requires either MSVC or clang to be installed and the command line to be correctly configured. 

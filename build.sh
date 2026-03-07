@@ -16,11 +16,12 @@ print_help() {
 Usage: $SCRIPT_NAME [OPTION]... [TARGETS]...
 
 Options:
-  --debug          Debug build (default)
-  --release        Release build
-  --relwithdebinfo RelWithDebInfo build
-  --trace          Enable Tracy profiling
-  --help           Display this help and exit
+    --debug          Debug build (default)
+    --release        Release build
+    --relwithdebinfo RelWithDebInfo build
+    --vulkan         Enable Vulkan support
+    --trace          Enable Tracy profiling
+    --help           Display this help and exit
 
 Targets:
   all              Build all demos
@@ -30,9 +31,10 @@ Targets:
   bunny            Build stanford bunny demo
 
 Environment variables:
-  CC               C compiler to use (default: g++)
-  CFLAGS           Additional compiler flags
-  LDFLAGS          Additional linker flags
+    CC               C compiler to use (default: g++)
+    CFLAGS           Additional compiler flags
+    LDFLAGS          Additional linker flags
+    VULKAN_SDK       Path to Vulkan SDK (optional)
 EOF
 }
 
@@ -80,6 +82,7 @@ main() {
             --trace)            trace=1;;
             --debug)            debug=1;;
             --relwithdebinfo)   relwithdebinfo=1;;
+            --vulkan)           vulkan=1;;
             --help)             print_help; exit 0;;
             *)                  actions+=("$arg");;
         esac
@@ -94,8 +97,24 @@ main() {
     elif [[ -v debug ]]; then
         CFLAGS="${CFLAGS} -g -O0 -DBUILD_DEBUG=1 -fno-omit-frame-pointer"
     fi
+
+    if [[ -v vulkan ]]; then
+        VULKAN_SDK_PATH="${VULKAN_SDK:-/usr/local/vulkan}"
+        CFLAGS="${CFLAGS} -DVULKAN_ENABLED -I${VULKAN_SDK_PATH}/include"
+        LDFLAGS="${LDFLAGS} -L${VULKAN_SDK_PATH}/lib -lvulkan"
+
+        # Compile GLSL ray tracing shaders to SPIR-V.
+        # Requires glslc (from the Vulkan SDK or shaderc) to be on PATH.
+        SHADER_SRC_DIR="src/raytracer/vulkan/shaders"
+        SHADER_OUT_DIR="${BUILD_DIR}/shaders"
+        mkdir -p "${SHADER_OUT_DIR}"
+        glslc --target-env=vulkan1.3 -fshader-stage=rgen  "${SHADER_SRC_DIR}/rgen.glsl"  -o "${SHADER_OUT_DIR}/rgen.spv"
+        glslc --target-env=vulkan1.3 -fshader-stage=rchit "${SHADER_SRC_DIR}/rchit.glsl" -o "${SHADER_OUT_DIR}/rchit.spv"
+        glslc --target-env=vulkan1.3 -fshader-stage=rmiss "${SHADER_SRC_DIR}/rmiss.glsl" -o "${SHADER_OUT_DIR}/rmiss.spv"
+        echo "- Shaders compiled to ${SHADER_OUT_DIR}/"
+    fi
     if [[ -v trace ]]; then
-        CFLAGS="${CFLAGS} -DTRACY_ENABLE src/third_party/tracy/public/TracyClient.cpp"
+        CFLAGS="${CFLAGS} -DTRACY_ENABLE -DTRACY_DELAYED_INIT src/third_party/tracy/public/TracyClient.cpp"
     fi
 
     # Print build info
